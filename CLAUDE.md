@@ -143,6 +143,11 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
 - Tras cambiar tablas de drift: `dart run build_runner build --delete-conflicting-outputs`
   (los *.g.dart se versionan porque el CI no corre build_runner).
 - Pruebas: `flutter test`; la base de drift en pruebas es `AppDatabase(NativeDatabase.memory())`.
+  `pumpApp` (test/support/fakes.dart) arma la app con simulados de API, viajes, cola
+  (FakeSyncApi), tiempo real, GPS y cámara.
+- Acciones del viaje: siempre `tripsController` → cola local → envío inmediato a
+  `/sync/batch` (sin señal quedan guardadas). Nada de esperar sonido/vibración (`unawaited`):
+  en pruebas esas llamadas nunca responden.
 
 ## Configuración compartida
 - tsconfig.base.json (estricto), eslint.config.mjs (typescript-eslint con tipos),

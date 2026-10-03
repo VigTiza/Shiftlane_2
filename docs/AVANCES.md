@@ -2,31 +2,24 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F07 — App del chofer (Flutter)
-- Último prompt completado: F07-P03 Revisión del celular antes del turno
-- Siguiente prompt: F07-P04 Pantalla principal, checklist y viaje
+- Último prompt completado: F07-P04 Pantalla principal, checklist y viaje
+- Siguiente prompt: F07-P05 Ubicación en segundo plano y modo sin señal
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
   apps/api/.env). Con Docker: `pnpm services:up` (requiere reiniciar la PC una vez).
 - Pendientes abiertos:
-  - PENDIENTE DE REINICIO: WSL y Docker Desktop instalados, se activan al reiniciar. Tras
-    reiniciar: abrir Docker Desktop, `pnpm services:up` (verificar que minio-setup no rompa
-    `--wait`) y correr las pruebas con Testcontainers / contra el compose, incluida la de S3
-    (S3_TEST_ENDPOINT=http://localhost:9000) y la de Redis (REDIS_TEST_URL); poner
-    REDIS_URL=redis://localhost:6379 en apps/api/.env.
-  - GitHub: origin = https://github.com/VigTiza/Shiftlane_2 (público), con acceso por el
-    administrador de credenciales de Git. El CI pasó completo (incluye Testcontainers y
-    Flutter en GitHub). Revisar el resultado tras cada push.
-  - Tareas programadas: hoy corren dentro de la API (temporizador + candado de PostgreSQL).
-    Pasarlas a BullMQ cuando Redis esté disponible (tras el reinicio y Docker).
-  - Avisos de solicitudes de la planta (despachador y gerente) con el motor de
-    notificaciones (F14-P01). Los mensajes al chofer hoy solo van por tiempo real (sin
-    guardar); si el chofer no está conectado no los recibe.
-  - Las salas se calculan al conectar: si cambian las rutas de un pasajero, debe reconectar.
-  - Deuda técnica: varios servicios usan Promise.all dentro de transacciones (pg avisa que
-    pg@9 lo prohibirá); volverlos secuenciales antes de actualizar pg.
-  - La API de desarrollo se puede levantar con `node src/server.ts` en apps/api (puerto
-    3000, documentación en http://localhost:3000/docs).
+  - PENDIENTE DE REINICIO (WSL y Docker): abrir Docker Desktop, `pnpm services:up` (revisar
+    que minio-setup no rompa `--wait`), correr pruebas con Testcontainers, S3
+    (S3_TEST_ENDPOINT=http://localhost:9000) y Redis (REDIS_TEST_URL); poner
+    REDIS_URL=redis://localhost:6379 en apps/api/.env y pasar las tareas programadas a BullMQ.
+  - GitHub: origin = https://github.com/VigTiza/Shiftlane_2; revisar el CI tras cada push.
+  - Mensajes al chofer solo por tiempo real (sin guardar); avisos de solicitudes de la planta
+    con el motor de notificaciones (F14-P01). Salas de tiempo real: se calculan al conectar.
+  - Mapa del chofer: OpenStreetMap solo en desarrollo (SHIFTLANE_TILE_URL); producción
+    necesita un proveedor que permita guardar mosaicos (MapTiler, Stadia o propio) y llave.
+  - Deuda técnica: Promise.all dentro de transacciones (pg@9 lo prohibirá).
+  - API de desarrollo: `node src/server.ts` en apps/api (http://localhost:3000/docs).
 
 ## DECISIONES IMPORTANTES
 - 2026-10-02 Los .docx se convierten con pandoc 3.12 y un script propio
@@ -179,7 +172,40 @@
   revisa una vez por sesión; si todo está en verde sigue sola al inicio. La excepción del
   despachador es la misma autorización de salida del viaje (checklist-exception).
 
+- 2026-10-03 Acciones del chofer en la app: todas pasan por la cola local y se envían de
+  inmediato a /sync/batch (un solo camino con o sin señal; el resultado del servidor se
+  muestra si llega, si no queda guardado y la pantalla avanza). Las fotos (checklist e
+  incidentes) se suben directo en línea porque necesitan su id. Sin señal, el checklist se
+  da por aprobado si todos los puntos están bien (el servidor decide al sincronizar).
+  Mosaicos: los de la ruta del día se descargan al abrir el inicio (zoom 12–15, máx. 400)
+  al caché de flutter_map. El aviso de parada se calcula en el celular con la distancia a
+  la siguiente parada (800 m para avisar, radio de la parada para «llegaste»).
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F07-P04 Pantalla principal, checklist y viaje
+- Hecho: inicio con Iniciar viaje / Escanear pasajero / Terminar viaje y lista de viajes del
+  día; checklist según la plantilla de la empresa con fotos obligatorias (cámara) y notas;
+  viaje en curso con mapa (flutter_map, ruta y paradas numeradas, mosaicos guardados),
+  aviso de parada por cercanía con vibración, siguiente parada, contador a bordo con
+  sobrecupo, incidentes con foto, botón de pánico siempre visible, llegada con QR de puerta
+  y terminar (o terminar sin QR con confirmación); mensajes del despachador, cancelaciones
+  y cambios de ruta por Socket.IO con sonido y vibración; escaneo básico y manual (lo
+  completa F07-P06).
+- Archivos principales: apps/driver/lib/domain/{trips,map}/*, lib/data/{trips,sync,
+  realtime,map}/*, lib/application/{trips,sync,realtime}/*,
+  lib/presentation/screens/trip/*, lib/presentation/widgets/{trip_map,panic_button}.dart,
+  lib/presentation/screens/home_screen.dart.
+- Pruebas agregadas / resultado: 16 nuevas (modelos, mosaicos, aviso de parada, cola con
+  aplicado/rechazado/reintento/sin señal, checklist con foto, checklist reprobado, inicio
+  rechazado, inicio sin señal, parada/incidente/pánico, aviso en pantalla con ubicación,
+  llegada con QR de otra planta y correcto, terminar sin QR, escaneo manual, mensaje del
+  despachador); 54 en total. API 364 (3 omitidas de Redis).
+- Problemas encontrados y cómo se resolvieron: esperar a SystemSound/HapticFeedback dejaba
+  colgado el aviso en pruebas (y lo retrasaba en el celular): ahora se lanzan sin esperar;
+  el aviso de pánico oculta cualquier otro aviso en pantalla.
+- Pendiente para después: GPS real y servicio en primer plano (F07-P05), validación local
+  del escaneo y sonidos por resultado (F07-P06), proveedor de mosaicos para producción.
+
 ### 2026-10-03 — F07-P03 Revisión del celular antes del turno
 - Hecho: lecturas del celular (ubicación y permiso «siempre», ahorro de batería, batería y
   carga, datos, cámara, versión) con permission_handler, battery_plus, connectivity_plus,

@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -9,6 +9,10 @@ import '../../domain/auth/auth_models.dart';
 import '../../presentation/screens/auth/auth_screens.dart';
 import '../../presentation/screens/device_check/device_check_screen.dart';
 import '../../presentation/screens/home_screen.dart';
+import '../../presentation/screens/trip/arrival_screen.dart';
+import '../../presentation/screens/trip/checklist_screen.dart';
+import '../../presentation/screens/trip/scan_screen.dart';
+import '../../presentation/screens/trip/trip_screen.dart';
 import 'app_routes.dart';
 
 export 'app_routes.dart';
@@ -35,6 +39,9 @@ String? redirectFor(
   };
 }
 
+/// Navegador principal: lo usan los avisos que llegan en tiempo real.
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ValueNotifier<AuthState>(ref.read(authControllerProvider));
   ref.listen(authControllerProvider, (_, next) => auth.value = next);
@@ -48,6 +55,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final controller = ref.read(authControllerProvider.notifier);
 
   final router = GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: AppRoutes.loading,
     refreshListenable: Listenable.merge([auth, checked]),
     redirect: (context, state) => redirectFor(
@@ -67,6 +75,23 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.deviceCheck,
         builder: (context, state) => const DeviceCheckScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.checklist,
+        builder: (context, state) =>
+            ChecklistScreen(tripId: state.extra! as String),
+      ),
+      GoRoute(
+        path: AppRoutes.trip,
+        builder: (context, state) => const TripScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.scan,
+        builder: (context, state) => const ScanScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.arrival,
+        builder: (context, state) => const ArrivalScreen(),
       ),
       GoRoute(
         path: AppRoutes.enroll,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +8,11 @@ import 'package:shiftlane_driver/app.dart';
 import 'package:dio/dio.dart';
 import 'package:shiftlane_driver/application/auth/auth_providers.dart';
 import 'package:shiftlane_driver/application/device_check/device_check_controller.dart';
+import 'package:shiftlane_driver/application/realtime/realtime_providers.dart';
+import 'package:shiftlane_driver/application/trips/trip_providers.dart';
+import 'package:shiftlane_driver/data/realtime/socket_realtime_client.dart';
+import 'package:shiftlane_driver/data/sync/sync_api.dart';
+import 'package:shiftlane_driver/domain/trips/trip_models.dart';
 import 'package:shiftlane_driver/core/network/api_client.dart';
 import 'package:shiftlane_driver/data/device_check/device_health_api.dart';
 import 'package:shiftlane_driver/domain/device_check/device_check.dart';
@@ -221,14 +228,171 @@ class FakeDeviceHealthApi extends DeviceHealthApi {
   }
 }
 
+/// Código que «lee» el lector de prueba (cada prueba puede cambiarlo).
+String fakeScannedCode = qrPayload;
+
 /// Lector de QR de prueba: un botón que «escanea» el código indicado.
 Widget fakeScanner(BuildContext context, ValueChanged<String> onCode) => Center(
   child: ElevatedButton(
     key: const Key('fake-scan'),
-    onPressed: () => onCode(qrPayload),
+    onPressed: () => onCode(fakeScannedCode),
     child: const Text('Simular escaneo'),
   ),
 );
+
+/// Viaje de ejemplo con tres paradas (respuesta de GET /driver/trips).
+Map<String, dynamic> tripJson({
+  String id = 'trip-1',
+  String status = 'scheduled',
+  bool checklistDone = false,
+  bool checklistPassed = false,
+  bool exceptionAuthorized = false,
+  int onboard = 0,
+  int capacity = 19,
+}) => {
+  'id': id,
+  'status': status,
+  'kind': 'regular',
+  'direction': 'inbound',
+  'serviceDate': '2026-10-05',
+  'scheduledStartAt': '2026-10-05T11:00:00.000Z',
+  'scheduledEndAt': '2026-10-05T12:00:00.000Z',
+  'canStartFrom': '2026-10-05T09:00:00.000Z',
+  'route': {'id': 'route-1', 'code': 'R-01', 'name': 'Riberas'},
+  'plant': {'id': 'plant-1', 'name': 'Planta Norte'},
+  'vehicle': {'id': 'v-1', 'economicNumber': 'U-014', 'capacity': capacity},
+  'expectedPassengers': 12,
+  'onboard': onboard,
+  'checklist': {
+    'done': checklistDone,
+    'passed': checklistPassed,
+    'exceptionAuthorized': exceptionAuthorized,
+  },
+  'stops': [
+    for (final (i, name) in ['Plaza', 'Tecnológico', 'Waterfill'].indexed)
+      {
+        'id': 'stop-$i',
+        'sequence': i,
+        'name': name,
+        'location': {'lat': 31.74 - i * 0.01, 'lng': -106.46 + i * 0.01},
+        'radiusMeters': 80,
+        'times': [
+          {
+            'weekdays': <int>[],
+            'time': '05:${(i * 15).toString().padLeft(2, '0')}',
+          },
+        ],
+      },
+  ],
+};
+
+class FakeTripRepository implements TripRepository {
+  FakeTripRepository({List<Map<String, dynamic>>? trips}) : trips = trips ?? [];
+
+  List<Map<String, dynamic>> trips;
+  List<ChecklistPoint> template = const [
+    ChecklistPoint(key: 'tires', label: 'Llantas', photoRequired: true),
+    ChecklistPoint(key: 'brakes', label: 'Frenos', photoRequired: false),
+  ];
+  final List<String> uploads = [];
+
+  @override
+  Future<List<DriverTrip>> todayTrips() async =>
+      trips.map(DriverTrip.fromJson).toList();
+
+  @override
+  Future<List<ChecklistPoint>> checklistTemplate() async => template;
+
+  @override
+  Future<String> uploadPhoto(
+    String tripId,
+    String kind,
+    List<int> bytes,
+    String fileName,
+  ) async {
+    uploads.add('$kind:$fileName');
+    return 'photo-${uploads.length}';
+  }
+}
+
+/// Servidor de sincronización simulado: aplica todo salvo lo que se configure.
+class FakeSyncApi extends SyncApi {
+  FakeSyncApi() : super(ApiClient(Dio()));
+
+  bool offline = false;
+  final Map<String, ActionResult> responses = {};
+  final List<Map<String, Object?>> received = [];
+  int onboard = 0;
+
+  List<String> get types => [for (final e in received) e['type']! as String];
+
+  @override
+  Future<List<SyncEventResult>> send(List<Map<String, Object?>> events) async {
+    if (offline) throw const NetworkFailure();
+    received.addAll(events);
+    return [
+      for (final event in events)
+        (id: event['id']! as String, result: _respond(event)),
+    ];
+  }
+
+  ActionResult _respond(Map<String, Object?> event) {
+    final type = event['type']! as String;
+    final configured = responses[type];
+    if (configured != null) return configured;
+    final data = (event['data']! as Map).cast<String, Object?>();
+    return switch (type) {
+      'checklist' => ActionResult(
+        SyncStatus.applied,
+        result: {
+          'passed': (data['items']! as List).every(
+            (i) => (i as Map)['ok'] == true,
+          ),
+        },
+      ),
+      'scan' => ActionResult(
+        SyncStatus.applied,
+        result: {
+          'result': 'ok',
+          'message': 'Bienvenido, Ana.',
+          'onboard': ++onboard,
+        },
+      ),
+      _ => const ActionResult(SyncStatus.applied),
+    };
+  }
+}
+
+/// GPS de prueba: cada prueba empuja las posiciones que necesite.
+class FakeLocationSource implements LocationSource {
+  final controller = StreamController<({double lat, double lng})>.broadcast();
+  ({double lat, double lng})? last;
+
+  void moveTo(double lat, double lng) {
+    last = (lat: lat, lng: lng);
+    controller.add(last!);
+  }
+
+  @override
+  Future<({double lat, double lng})?> current() async => last;
+
+  @override
+  Stream<({double lat, double lng})> watch() => controller.stream;
+}
+
+class FakeRealtimeClient implements RealtimeClient {
+  final controller = StreamController<RealtimeEvent>.broadcast();
+  String? token;
+
+  @override
+  Stream<RealtimeEvent> get events => controller.stream;
+
+  @override
+  void connect(String accessToken) => token = accessToken;
+
+  @override
+  void disconnect() => token = null;
+}
 
 Future<ProviderContainer> pumpApp(
   WidgetTester tester, {
@@ -238,6 +402,10 @@ Future<ProviderContainer> pumpApp(
   FakeDeviceProbe? probe,
   FakeDeviceFixer? fixer,
   FakeDeviceHealthApi? healthApi,
+  FakeTripRepository? trips,
+  FakeSyncApi? sync,
+  FakeRealtimeClient? realtime,
+  FakeLocationSource? location,
 }) async {
   final deviceProbe = probe ?? FakeDeviceProbe();
   final db = AppDatabase(NativeDatabase.memory());
@@ -257,6 +425,18 @@ Future<ProviderContainer> pumpApp(
       ),
       deviceHealthApiProvider.overrideWithValue(
         healthApi ?? FakeDeviceHealthApi(),
+      ),
+      tripRepositoryProvider.overrideWithValue(trips ?? FakeTripRepository()),
+      syncApiProvider.overrideWithValue(sync ?? FakeSyncApi()),
+      realtimeClientProvider.overrideWithValue(
+        realtime ?? FakeRealtimeClient(),
+      ),
+      mapTilesEnabledProvider.overrideWithValue(false),
+      locationSourceProvider.overrideWithValue(
+        location ?? FakeLocationSource(),
+      ),
+      photoCaptureProvider.overrideWithValue(
+        () async => (bytes: <int>[1, 2, 3], name: 'foto.jpg'),
       ),
     ],
   );

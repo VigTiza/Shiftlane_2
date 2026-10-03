@@ -7,4 +7,8 @@ abstract final class AppRoutes {
   static const pin = '/entrar/pin';
   static const newPin = '/entrar/nuevo-pin';
   static const deviceCheck = '/revision';
+  static const checklist = '/checklist';
+  static const trip = '/viaje';
+  static const scan = '/escanear';
+  static const arrival = '/llegada';
 }

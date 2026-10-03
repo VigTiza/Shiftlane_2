@@ -7,7 +7,13 @@ class AppConfig {
     required this.environment,
     required this.apiBaseUrl,
     required this.locationIntervalSeconds,
+    this.tileUrlTemplate = defaultTileUrl,
   });
+
+  /// Mosaicos del mapa. En producción usar un proveedor que permita guardarlos en el
+  /// celular (OpenStreetMap solo sirve para desarrollo).
+  static const defaultTileUrl =
+      'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
   /// URL por omisión de cada ambiente (dev apunta a la API local desde el emulador).
   static const Map<AppEnvironment, String> defaultApiUrls = {
@@ -21,6 +27,8 @@ class AppConfig {
 
   /// Cada cuántos segundos se envía la ubicación durante un viaje.
   final int locationIntervalSeconds;
+
+  final String tileUrlTemplate;
 
   bool get isProduction => environment == AppEnvironment.prod;
 
@@ -36,6 +44,7 @@ class AppConfig {
     String environment = 'dev',
     String apiUrl = '',
     String locationInterval = '',
+    String tileUrl = '',
   }) {
     final env = AppEnvironment.values.where((e) => e.name == environment);
     if (env.isEmpty) {
@@ -59,6 +68,7 @@ class AppConfig {
       environment: env.first,
       apiBaseUrl: parsed,
       locationIntervalSeconds: interval.clamp(10, 15),
+      tileUrlTemplate: tileUrl.isNotEmpty ? tileUrl : defaultTileUrl,
     );
   }
 
@@ -72,5 +82,6 @@ class AppConfig {
     locationInterval: const String.fromEnvironment(
       'SHIFTLANE_LOCATION_INTERVAL',
     ),
+    tileUrl: const String.fromEnvironment('SHIFTLANE_TILE_URL'),
   );
 }
