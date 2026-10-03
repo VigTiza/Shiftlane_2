@@ -103,6 +103,8 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
 - Eventos: `app.events.publish({ type, ... })` dentro de la transacción (se entregan solo si
   se confirma y la petición responde sin error); src/realtime/server.ts los envía por
   Socket.IO a las salas tenant/planta/ruta/chofer.
+- Alertas: src/modules/alerts/engine.ts escucha el bus (`app.alerts.idle()` en pruebas para
+  esperar la evaluación) y `app.alerts.runMinute(now)` corre la evaluación por minuto.
 - Viajes regulares: cualquier cambio que afecte la programación (rutas, versiones, turnos,
   festivos, cambios temporales) llama a `app.schedule.refresh*` en la misma transacción.
 - Autorización por acción (docs/api.md): rutas de usuarios web con

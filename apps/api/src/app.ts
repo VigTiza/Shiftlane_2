@@ -19,6 +19,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { Env } from './config/env.ts';
 import { createCredentialSigner } from './lib/credential-signer.ts';
 import { createCipher } from './lib/crypto.ts';
+import { createMinuteJob } from './jobs/minute.ts';
 import { ensureUpcomingPartitions } from './jobs/position-partitions.ts';
 import { createDailyScheduler } from './jobs/scheduler.ts';
 import { ensureTripHorizon } from './jobs/trip-horizon.ts';
@@ -63,6 +64,9 @@ import { requestRoutes } from './modules/requests/routes.ts';
 import { routeRoutes } from './modules/routes/routes.ts';
 import { syncRoutes } from './modules/sync/routes.ts';
 import { tripRoutes } from './modules/trips/routes.ts';
+import { createAlertEngine } from './modules/alerts/engine.ts';
+import { alertRoutes } from './modules/alerts/routes.ts';
+import { createRoutesService } from './modules/routes/service.ts';
 import { createRealtime } from './realtime/server.ts';
 import { scheduleRoutes } from './modules/schedule/routes.ts';
 import { createScheduleService } from './modules/schedule/service.ts';
@@ -195,6 +199,21 @@ export async function buildApp({ env, db, mailer, storage, routing, liveStore }:
     log: app.log,
   });
   app.decorate('realtime', realtime);
+  const alerts = createAlertEngine({
+    db: database,
+    events,
+    liveStore: app.liveStore,
+    routes: createRoutesService({
+      routing: app.routingProvider,
+      averageSpeedKmh: env.ROUTING_AVERAGE_SPEED_KMH,
+    }),
+    log: app.log,
+  });
+  app.decorate('alerts', alerts);
+  app.addHook('onClose', async () => {
+    alerts.close();
+    await alerts.idle();
+  });
   app.addHook('onClose', (_instance, done) => {
     realtime.close();
     done();
@@ -232,11 +251,21 @@ export async function buildApp({ env, db, mailer, storage, routing, liveStore }:
         },
       ],
     });
+    const alertsEveryMinute = createMinuteJob({
+      name: 'alerts-minute',
+      pool: database.pool,
+      log: app.log,
+      run: () => alerts.runMinute(),
+    });
     app.addHook('onReady', (done) => {
       scheduler.start();
+      alertsEveryMinute.start();
       done();
     });
-    app.addHook('onClose', async () => scheduler.stop());
+    app.addHook('onClose', async () => {
+      await scheduler.stop();
+      await alertsEveryMinute.stop();
+    });
   }
   app.decorate('authServices', {
     auth: createAuthService({ ...authDeps, cipher, mailer: mail, appUrl: env.APP_URL }),
@@ -305,6 +334,7 @@ export async function buildApp({ env, db, mailer, storage, routing, liveStore }:
   await app.register(requestRoutes);
   await app.register(tripRoutes);
   await app.register(syncRoutes);
+  await app.register(alertRoutes);
 
   return app;
 }

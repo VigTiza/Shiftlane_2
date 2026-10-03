@@ -218,6 +218,11 @@ export function createScheduleService(deps: {
         );
       }
       await saveAssignment(tx, tripId, { driverId, vehicleId, source: 'manual', userId });
+      deps.events?.publish({
+        type: 'trip.assigned',
+        tripId,
+        conflicts: errors.map((c) => ({ type: c.type, message: c.message })),
+      });
       return { trip: await this.tripSummary(tx, tripId), conflicts };
     },
 

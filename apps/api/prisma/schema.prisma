@@ -52,6 +52,9 @@ model Tenant {
   incidents           Incident[]
   panicEvents         PanicEvent[]
   deviceSyncEvents    DeviceSyncEvent[]
+  alertRules          AlertRule[]
+  alerts              Alert[]
+  alertActions        AlertAction[]
   driverPins          DriverPin[]
   driverEnrollments   DriverEnrollment[]
   devices             Device[]
@@ -1300,6 +1303,7 @@ model Trip {
   boardings        Boarding[]
   incidents        Incident[]
   panicEvents      PanicEvent[]
+  alerts           Alert[]
 
   @@unique([id, tenantId])
   @@index([tenantId, serviceDate])
@@ -1630,4 +1634,117 @@ model DeviceSyncEvent {
   @@unique([deviceId, eventId])
   @@index([tenantId, receivedAt])
   @@map("device_sync_events")
+}
+
+// ---------------------------------------------------------------------------
+// Alertas (F06-P01)
+// ---------------------------------------------------------------------------
+
+enum AlertType {
+  trip_not_started
+  delay
+  off_route
+  speeding
+  unscheduled_stop
+  overcapacity
+  panic
+  checklist_failed
+  device_silent
+  expired_documents_on_assign
+}
+
+enum AlertSeverity {
+  info
+  warning
+  critical
+}
+
+enum AlertStatus {
+  /// Nadie la ha tomado.
+  open
+  /// Alguien la está atendiendo.
+  acknowledged
+  resolved
+}
+
+/// Configuración de cada tipo de alerta por transportista (sin fila: valores por omisión).
+model AlertRule {
+  id                   String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId             String        @map("tenant_id") @db.Uuid
+  type                 AlertType
+  enabled              Boolean       @default(true)
+  severity             AlertSeverity
+  /// Umbrales propios de cada tipo (minutos, metros, km/h).
+  params               Json          @default("{}")
+  /// Si nadie la atiende en estos minutos, se escala al gerente.
+  escalateAfterMinutes Int           @map("escalate_after_minutes")
+  /// También la ve la planta.
+  notifyPlant          Boolean       @default(false) @map("notify_plant")
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, type])
+  @@map("alert_rules")
+}
+
+/// Alerta automática con causa, ubicación y acción sugerida.
+model Alert {
+  id                   String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId             String        @map("tenant_id") @db.Uuid
+  plantId              String?       @map("plant_id") @db.Uuid
+  tripId               String?       @map("trip_id") @db.Uuid
+  driverId             String?       @map("driver_id") @db.Uuid
+  vehicleId            String?       @map("vehicle_id") @db.Uuid
+  type                 AlertType
+  severity             AlertSeverity
+  status               AlertStatus   @default(open)
+  cause                String
+  suggestedAction      String        @map("suggested_action")
+  lat                  Float?
+  lng                  Float?
+  data                 Json?
+  /// Evita abrir dos veces la misma alerta mientras sigue abierta (tipo + viaje, por ejemplo).
+  dedupeKey            String        @map("dedupe_key")
+  notifyPlant          Boolean       @default(false) @map("notify_plant")
+  openedAt             DateTime      @default(now()) @map("opened_at") @db.Timestamptz(3)
+  acknowledgedAt       DateTime?     @map("acknowledged_at") @db.Timestamptz(3)
+  acknowledgedByUserId String?       @map("acknowledged_by_user_id") @db.Uuid
+  resolvedAt           DateTime?     @map("resolved_at") @db.Timestamptz(3)
+  resolvedByUserId     String?       @map("resolved_by_user_id") @db.Uuid
+  resolution           String?
+  /// Se cerró sola porque la causa desapareció.
+  autoResolved         Boolean       @default(false) @map("auto_resolved")
+  escalatedAt          DateTime?     @map("escalated_at") @db.Timestamptz(3)
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant  Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  trip    Trip?         @relation(fields: [tripId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  actions AlertAction[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, dedupeKey])
+  @@index([tripId])
+  @@map("alerts")
+}
+
+/// Historial de cada alerta: creación, atención, notas, escalamiento y cierre.
+model AlertAction {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  alertId   String   @map("alert_id") @db.Uuid
+  /// created, acknowledged, note, escalated, resolved o auto_resolved.
+  action    String
+  userId    String?  @map("user_id") @db.Uuid
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  alert  Alert  @relation(fields: [alertId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@index([alertId])
+  @@map("alert_actions")
 }

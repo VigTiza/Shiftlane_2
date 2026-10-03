@@ -2,8 +2,8 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F06 — Alertas y diagnóstico
-- Último prompt completado: F05-P04 Tiempo real con Socket.IO (fase F05 terminada)
-- Siguiente prompt: F06-P01 Motor de alertas
+- Último prompt completado: F06-P01 Motor de alertas
+- Siguiente prompt: F06-P02 Reportes de salud del celular y diagnóstico
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -146,7 +146,32 @@
   petición los envía solo si responde sin error. Socket.IO se suscribe al bus; F06 y las
   notificaciones podrán hacerlo igual. Salas: tenant, planta, ruta y chofer.
 
+- 2026-10-03 Motor de alertas suscrito al bus de eventos (evaluación asíncrona después del
+  commit, nunca detiene la operación) y tarea por minuto con candado de PostgreSQL por
+  sesión. Escribe con db.system (proceso automático) y la API de atención usa RLS. Las
+  alertas no se duplican con un candado por clave (tipo + viaje/pánico/checklist) en vez de
+  un índice parcial que Prisma no maneja. Escalar = marcar escalatedAt y avisar en tiempo
+  real; el aviso por canales al gerente llega con el motor de notificaciones (F14-P01).
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F06-P01 Motor de alertas
+- Hecho: migración alerts (alert_rules auditada, alerts con RLS y vista para la planta,
+  alert_actions inmutable). Reglas con valores por omisión y umbrales validados por tipo.
+  Motor con los 10 tipos (eventos y cada minuto), causa, ubicación y acción sugerida,
+  cierre automático, escalamiento; eventos nuevos panic.created, checklist.submitted y
+  trip.assigned. API para ver, atender, resolver, anotar y configurar. Tarea por minuto.
+  Atender una alerta de pánico también atiende el pánico.
+- Archivos principales: apps/api/src/modules/alerts/*, src/jobs/minute.ts,
+  prisma/migrations/*_alerts.
+- Pruebas agregadas / resultado: 15 de integración (una por regla con datos simulados,
+  cierre al terminar o cancelar, atención con tiempos e historial, escalamiento, reglas por
+  empresa con aviso a la planta y aislamiento, evaluación desde una posición real). 333
+  pruebas de la API en verde.
+- Problemas encontrados y cómo se resolvieron: la parada no programada se medía desde un
+  punto ancla; ahora se mide hacia atrás desde la última posición.
+- Pendiente para después: causa probable de la unidad sin reportar (F06-P02); aviso al
+  gerente por notificación (F14-P01).
+
 ### 2026-10-03 — F05-P04 Tiempo real con Socket.IO
 - Hecho: servidor Socket.IO en /realtime autenticado con el token de acceso (se cierra al
   vencer), salas por empresa, planta, ruta y chofer, adaptador Redis con REDIS_URL. Bus de

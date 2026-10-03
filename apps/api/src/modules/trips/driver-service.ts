@@ -412,6 +412,12 @@ export function createDriverTripsService(deps: {
           failed,
         },
       );
+      deps.events?.publish({
+        type: 'checklist.submitted',
+        tripId,
+        checklistResultId: result.id,
+        passed,
+      });
       return {
         id: result.id,
         passed,
@@ -755,6 +761,12 @@ export function createDriverTripsService(deps: {
           { panicEventId: panic.id },
         );
       }
+      deps.events?.publish({
+        type: 'panic.created',
+        tenantId: session.tenantId,
+        panicEventId: panic.id,
+        tripId: trip?.id ?? null,
+      });
       return { id: panic.id, occurredAt: at, duplicate: false };
     },
 

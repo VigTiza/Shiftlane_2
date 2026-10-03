@@ -253,6 +253,11 @@ export function createRealtime(options: {
       case 'device.health_changed':
         io.to(rooms.tenant(event.tenantId)).emit('device.health_changed', event.device);
         return;
+      // Eventos internos: los usa el motor de alertas, no se envían a los clientes.
+      case 'panic.created':
+      case 'checklist.submitted':
+      case 'trip.assigned':
+        return;
     }
   }
 

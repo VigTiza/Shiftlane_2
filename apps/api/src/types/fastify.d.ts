@@ -5,6 +5,7 @@ import type { Database } from '../lib/db.ts';
 import type { DomainEvents } from '../lib/domain-events.ts';
 import type { LiveStore } from '../lib/live-store.ts';
 import type { Realtime } from '../realtime/server.ts';
+import type { AlertEngine } from '../modules/alerts/engine.ts';
 import type { Mailer } from '../lib/mailer.ts';
 import type { RoutingProvider } from '../lib/routing.ts';
 import type { ObjectStorage } from '../lib/storage.ts';
@@ -33,6 +34,7 @@ declare module 'fastify' {
     liveStore: LiveStore;
     events: DomainEvents;
     realtime: Realtime;
+    alerts: AlertEngine;
     authServices: {
       auth: AuthService;
       drivers: DriverAuthService;

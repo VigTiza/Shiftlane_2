@@ -30,7 +30,11 @@ export type DomainEvent =
       notifyPlant: boolean;
       alert: Record<string, unknown>;
     }
-  | { type: 'device.health_changed'; tenantId: string; device: Record<string, unknown> };
+  | { type: 'device.health_changed'; tenantId: string; device: Record<string, unknown> }
+  | { type: 'panic.created'; tenantId: string; panicEventId: string; tripId: string | null }
+  | { type: 'checklist.submitted'; tripId: string; checklistResultId: string; passed: boolean }
+  /** Asignación manual guardada, con los conflictos que se confirmaron. */
+  | { type: 'trip.assigned'; tripId: string; conflicts: { type: string; message: string }[] };
 
 type Listener = (event: DomainEvent) => void;
 

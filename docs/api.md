@@ -227,6 +227,11 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 | GET | /trips/:id/live | `monitoring.view`, `schedule.read` o `plant.dashboard` | Última posición del viaje en curso con horas estimadas |
 | GET | /live/positions | `monitoring.view` o `dispatch.operate` | Posiciones en vivo de los viajes en curso de la empresa |
 | POST | /drivers/:id/messages | `dispatch.operate` | Mensaje al chofer (llega por tiempo real como `message.to_driver`) |
+| GET | /alerts?status=&type=&tripId=&from=&to= | `alerts.manage`, `monitoring.view`, `dispatch.operate` o `plant.dashboard` | Alertas (la planta solo las que la regla le comparte) |
+| GET | /alerts/:id | igual que la lista | Detalle con historial (quién, qué y cuándo) |
+| POST | /alerts/:id/acknowledge, /resolve, /notes | `alerts.manage` o `dispatch.operate` | Atender, resolver (con lo que se hizo) o anotar |
+| GET | /alert-rules | `settings.manage` o `alerts.manage` | Reglas de la empresa con valores por omisión |
+| PUT | /alert-rules/:type | `settings.manage` | Activa, gravedad, umbrales, escalamiento y aviso a la planta |
 | GET | /trips/:id | `schedule.read`, `monitoring.view`, `plant.evidence` o `plant.dashboard` | Detalle con evidencia: historial, checklist, abordajes, incidentes, fotos |
 | GET | /trips/:id/photos/:photoId | igual que el detalle | Foto del viaje |
 | POST | /trips/:id/checklist-exception | `dispatch.operate` | Autoriza salir con el checklist sin aprobar |
@@ -330,6 +335,19 @@ token nuevo). Salas según quién se conecta: transportista con `monitoring.view
 Los eventos salen solo después de guardar los cambios: lo publicado en una transacción que
 falla o en una petición que responde con error no se envía. Con `REDIS_URL`, varias copias
 de la API comparten las salas (adaptador de Redis).
+
+Alertas: el motor evalúa con cada evento (posición, abordaje, pánico, checklist, asignación,
+inicio, fin o cancelación del viaje) y cada minuto (viaje no iniciado, unidad sin reportar,
+parada no programada y escalamiento). Tipos y umbrales por omisión: `trip_not_started`
+(5 min de tolerancia), `delay` (10 min), `off_route` (150 m del trazado), `speeding`
+(80 km/h), `unscheduled_stop` (5 min dentro de 50 m, lejos de paradas y de la planta),
+`overcapacity`, `panic` (crítica, escala a los 2 min), `checklist_failed`, `device_silent`
+(5 min sin posiciones) y `expired_documents_on_assign`. Cada alerta trae causa, ubicación y
+acción sugerida; no se repite mientras sigue abierta y se cierra sola cuando la causa
+desaparece (`autoResolved`). Estados: `open` → `acknowledged` → `resolved`, con
+`minutesToAcknowledge` y `minutesToResolve`. Si nadie la atiende en `escalateAfterMinutes`,
+se escala al gerente (`escalatedAt`). Se envían en tiempo real como `alert.created` y
+`alert.updated`.
 
 Credencial QR del pasajero: `SL1.<datos en base64url>.<firma Ed25519>`; los datos llevan
 credencial, pasajero, empresa y un valor aleatorio que cambia al reemitirla.
