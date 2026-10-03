@@ -36,17 +36,17 @@ model Tenant {
   updatedAt DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt DateTime?    @map("deleted_at") @db.Timestamptz(3)
 
-  users             User[]
-  userRoles         UserRole[]
-  sessions          Session[]
-  auditLogs         AuditLog[]
-  serviceAgreements ServiceAgreement[]
-  createdClientOrgs ClientOrg[]        @relation("ClientOrgCreatedBy")
-  drivers           Driver[]
-  driverPins        DriverPin[]
-  driverEnrollments DriverEnrollment[]
-  devices           Device[]
-  driverDevices     DriverDevice[]
+  users               User[]
+  permissionOverrides UserPermissionOverride[]
+  userRoles           UserRole[]
+  sessions            Session[]
+  serviceAgreements   ServiceAgreement[]
+  createdClientOrgs   ClientOrg[]              @relation("ClientOrgCreatedBy")
+  drivers             Driver[]
+  driverPins          DriverPin[]
+  driverEnrollments   DriverEnrollment[]
+  devices             Device[]
+  driverDevices       DriverDevice[]
 
   @@map("tenants")
 }
@@ -89,11 +89,12 @@ model User {
   updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  tenant              Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  clientOrg           ClientOrg?           @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
+  tenant              Tenant?                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  clientOrg           ClientOrg?               @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
   roles               UserRole[]
   sessions            Session[]
   passwordResetTokens PasswordResetToken[]
+  permissionOverrides UserPermissionOverride[]
 
   @@index([tenantId])
   @@index([clientOrgId])
@@ -147,6 +148,32 @@ enum SessionPrincipal {
   user
   driver
   passenger
+}
+
+enum PermissionEffect {
+  grant
+  revoke
+}
+
+/// Permiso otorgado o quitado a un usuario además de los de sus roles.
+model UserPermissionOverride {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String           @map("user_id") @db.Uuid
+  permission  String
+  effect      PermissionEffect
+  /// Copia del ámbito del usuario (lo fija un disparador).
+  tenantId    String?          @map("tenant_id") @db.Uuid
+  clientOrgId String?          @map("client_org_id") @db.Uuid
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant    Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clientOrg ClientOrg? @relation(fields: [clientOrgId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permission])
+  @@index([tenantId])
+  @@index([clientOrgId])
+  @@map("user_permission_overrides")
 }
 
 /// Sesión de usuario web, chofer o pasajero: guarda el hash del token de renovación (rotativo).
@@ -204,7 +231,9 @@ model AuditLog {
   id          BigInt   @id @default(autoincrement())
   tenantId    String?  @map("tenant_id") @db.Uuid
   clientOrgId String?  @map("client_org_id") @db.Uuid
-  actorUserId String?  @map("actor_user_id") @db.Uuid
+  /// user, driver, passenger o system.
+  actorType   String   @default("system") @map("actor_type")
+  actorId     String?  @map("actor_id") @db.Uuid
   action      String
   entityType  String   @map("entity_type")
   entityId    String?  @map("entity_id")
@@ -213,9 +242,6 @@ model AuditLog {
   requestId   String?  @map("request_id")
   ip          String?
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-
-  tenant    Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  clientOrg ClientOrg? @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, createdAt])
   @@index([clientOrgId, createdAt])
@@ -241,14 +267,14 @@ model ClientOrg {
   updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  createdByTenant   Tenant?            @relation("ClientOrgCreatedBy", fields: [createdByTenantId], references: [id], onDelete: Restrict)
-  plants            Plant[]
-  users             User[]
-  userRoles         UserRole[]
-  sessions          Session[]
-  auditLogs         AuditLog[]
-  serviceAgreements ServiceAgreement[]
-  passengers        Passenger[]
+  createdByTenant     Tenant?                  @relation("ClientOrgCreatedBy", fields: [createdByTenantId], references: [id], onDelete: Restrict)
+  plants              Plant[]
+  users               User[]
+  permissionOverrides UserPermissionOverride[]
+  userRoles           UserRole[]
+  sessions            Session[]
+  serviceAgreements   ServiceAgreement[]
+  passengers          Passenger[]
 
   @@index([createdByTenantId])
   @@map("client_orgs")

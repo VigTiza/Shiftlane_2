@@ -315,7 +315,8 @@ describe('bitácora de auditoría', () => {
       tx.auditLog.create({
         data: {
           tenantId: tenants.norte.id,
-          actorUserId: users.norteOwner.id,
+          actorType: 'user',
+          actorId: users.norteOwner.id,
           action: 'update',
           entityType: 'user',
           entityId: users.norteDispatcher.id,

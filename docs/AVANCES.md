@@ -1,9 +1,9 @@
 # AVANCES — Shiftlane
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
-- Fase actual: F01 — Núcleo del backend
-- Último prompt completado: F01-P03
-- Siguiente prompt: F01-P04 Roles, permisos y auditoría
+- Fase actual: F02 — Catálogos
+- Último prompt completado: F01-P04 (fase F01 terminada)
+- Siguiente prompt: F02-P01 Unidades, choferes y documentos
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -59,8 +59,33 @@
 - 2026-10-03 Autenticación (docs/decisiones/0004): JWT de 15 min + token de renovación
   rotativo con detección de reutilización; cookie httpOnly para web y pasajeros, cuerpo para
   la app del chofer; PIN del chofer ligado al secreto del celular. REVISAR CON EL USUARIO.
+- 2026-10-03 Permisos por acción en packages/shared (matriz rol → permisos + ajustes por
+  usuario), viajan en el token; docs/api.md se genera con `pnpm docs:permisos`. Planta:
+  plant_logistics administra los usuarios de su planta (users.manage).
+- 2026-10-03 Auditoría con disparadores de PostgreSQL (app.audit_row / app.enable_audit):
+  cubre SQL directo, nunca guarda secretos, ignora columnas sin importancia. audit_log sin
+  llaves foráneas para sobrevivir a lo que registra.
 
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F01-P04 Roles, permisos y auditoría
+- Hecho: catálogo de 49 permisos por acción y matriz de 11 roles en packages/shared (con
+  efectivePermissions y ajustes por usuario); permisos efectivos en el token; middleware
+  requirePermission; docs/api.md con convenciones, matriz generada y endpoints. Migración
+  permissions_audit: user_permission_overrides con RLS, audit_log con actor_type/actor_id,
+  disparador genérico de auditoría en 13 tablas. Módulos users (/users, roles, permisos,
+  /me/permissions) y audit (/audit-log). Contexto de BD con actor, request id e IP.
+- Archivos principales: packages/shared/src/permissions*.ts, apps/api/src/plugins/auth.ts,
+  src/modules/{users,audit}/*, prisma/migrations/*_permissions_audit, docs/api.md.
+- Pruebas agregadas / resultado: 9 en shared (matriz, ámbitos, casos permitidos/prohibidos,
+  ajustes, docs al día) y 25 en la API (matriz por HTTP por rol, ajustes que cambian el
+  acceso, 403 en español, roles de BD = shared, usuarios con validaciones y último dueño,
+  auditoría con actor y request id, altas/bajas, secretos, ruido, alcance por tenant,
+  cobertura de tablas). 114 pruebas de la API en verde.
+- Problemas encontrados y cómo se resolvieron: heredocs de bash con plantillas de TS se
+  rompen (se escriben archivos con la herramienta Write); Supertest con await dentro de la
+  cadena (calcular tokens antes).
+- Pendiente para después: invitar usuarios por correo (F02-P02 para planta, F08-P07 panel).
+
 ### 2026-10-03 — F01-P03 Autenticación y sesiones
 - Hecho: migración auth (bloqueo y 2FA en users, sesiones para usuario/chofer/pasajero,
   password_reset_tokens, drivers, driver_pins, driver_enrollments, devices, driver_devices,

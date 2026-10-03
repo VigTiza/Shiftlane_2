@@ -11,6 +11,8 @@ export const accessClaimsSchema = z.discriminatedUnion('kind', [
     tenantId: z.uuid().nullable(),
     clientOrgId: z.uuid().nullable(),
     roles: z.array(z.string()),
+    /** Permisos efectivos (roles + ajustes del usuario) al emitir el token. */
+    permissions: z.array(z.string()),
   }),
   z.object({
     kind: z.literal('driver'),

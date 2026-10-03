@@ -1,21 +1,19 @@
 import type { FastifyPluginCallbackZod } from 'fastify-type-provider-zod';
 
 import { withDbContext } from '../../lib/db.ts';
-import { authOf, dbContextOf, requireAuth } from '../../plugins/auth.ts';
+import { authOf, dbContextOf, requirePermission } from '../../plugins/auth.ts';
 import { driverParams, enrollmentResponse, messageResponse } from './schemas.ts';
 
 const TAGS = ['Choferes'];
-// Hasta F01-P04 (permisos por acción) se limita por rol.
-const DISPATCH_ROLES = ['owner', 'manager', 'dispatcher'];
 
 export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   const { drivers } = app.authServices;
-  const canDispatch = requireAuth(app, { kinds: ['user'], roles: DISPATCH_ROLES });
+  const canEnroll = requirePermission(app, 'drivers.enroll');
 
   app.post(
     '/drivers/:driverId/enrollment',
     {
-      preHandler: canDispatch,
+      preHandler: canEnroll,
       schema: {
         tags: TAGS,
         summary: 'Genera el código QR de un solo uso para vincular al chofer con su celular',
@@ -25,7 +23,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
     },
     async (request, reply) => {
       const auth = authOf(request, 'user');
-      const enrollment = await withDbContext(app.db.app, dbContextOf(auth), (tx) =>
+      const enrollment = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
         drivers.createEnrollment(tx, {
           driverId: request.params.driverId,
           createdByUserId: auth.sub,
@@ -38,7 +36,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.post(
     '/drivers/:driverId/pin-reset',
     {
-      preHandler: canDispatch,
+      preHandler: canEnroll,
       schema: {
         tags: TAGS,
         summary: 'Restablece el PIN del chofer; creará uno nuevo en su celular',
@@ -47,8 +45,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
       },
     },
     async (request) => {
-      const auth = authOf(request, 'user');
-      await withDbContext(app.db.app, dbContextOf(auth), (tx) =>
+      await withDbContext(app.db.app, dbContextOf(request), (tx) =>
         drivers.resetPin(tx, request.params.driverId),
       );
       return { message: 'El PIN se restableció. El chofer creará uno nuevo al entrar.' };

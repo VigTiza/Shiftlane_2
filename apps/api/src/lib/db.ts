@@ -15,6 +15,11 @@ export interface DbContext {
   tenantId?: string | null;
   clientOrgId?: string | null;
   userId?: string | null;
+  /** Para la bitácora: quién hace el cambio (user, driver, passenger o system). */
+  actorType?: 'user' | 'driver' | 'passenger' | 'system';
+  actorId?: string | null;
+  requestId?: string | null;
+  ip?: string | null;
 }
 
 export interface Database {
@@ -72,7 +77,11 @@ export async function withDbContext<T>(
       await tx.$executeRaw`
         SELECT set_config('app.tenant_id', ${context.tenantId ?? ''}, true),
                set_config('app.client_org_id', ${context.clientOrgId ?? ''}, true),
-               set_config('app.user_id', ${context.userId ?? ''}, true)`;
+               set_config('app.user_id', ${context.userId ?? ''}, true),
+               set_config('app.actor_type', ${context.actorType ?? 'system'}, true),
+               set_config('app.actor_id', ${context.actorId ?? context.userId ?? ''}, true),
+               set_config('app.request_id', ${context.requestId ?? ''}, true),
+               set_config('app.ip', ${context.ip ?? ''}, true)`;
       return fn(tx);
     },
     { timeout: options?.timeout ?? 10_000 },

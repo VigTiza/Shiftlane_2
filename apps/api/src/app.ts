@@ -24,12 +24,14 @@ import { createLogMailer, createSmtpMailer } from './lib/mailer.ts';
 import type { Mailer } from './lib/mailer.ts';
 import { createDriverAuthService } from './modules/auth/driver-service.ts';
 import { createPassengerAuthService } from './modules/auth/passenger-service.ts';
+import { auditRoutes } from './modules/audit/routes.ts';
 import { authRoutes } from './modules/auth/routes.ts';
 import { createAuthService } from './modules/auth/service.ts';
 import { createSessionService } from './modules/auth/sessions.ts';
 import { createTokenService } from './modules/auth/tokens.ts';
 import { driverRoutes } from './modules/drivers/routes.ts';
 import { healthRoutes } from './modules/health/routes.ts';
+import { userRoutes } from './modules/users/routes.ts';
 import { authPlugin } from './plugins/auth.ts';
 import { errorHandlerPlugin } from './plugins/error-handler.ts';
 
@@ -132,6 +134,8 @@ export async function buildApp({ env, db, mailer }: BuildAppOptions) {
   await app.register(healthRoutes);
   await app.register(authRoutes);
   await app.register(driverRoutes);
+  await app.register(userRoutes);
+  await app.register(auditRoutes);
 
   return app;
 }

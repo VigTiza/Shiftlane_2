@@ -1,3 +1,6 @@
+import { effectivePermissions } from '@shiftlane/shared';
+import type { Permission } from '@shiftlane/shared';
+
 import type { Cipher } from '../../lib/crypto.ts';
 import { randomToken, sha256 } from '../../lib/crypto.ts';
 import type { DbClient } from '../../lib/db.ts';
@@ -45,18 +48,25 @@ export function createAuthService(deps: AuthDeps) {
   async function userClaims(userId: string, sessionId: string): Promise<AccessClaims> {
     const user = await db.user.findUniqueOrThrow({
       where: { id: userId },
-      include: { roles: { include: { role: true } } },
+      include: { roles: { include: { role: true } }, permissionOverrides: true },
     });
     if (user.status !== 'active' || user.deletedAt) {
       throw new UnauthorizedError('Tu cuenta no está activa.');
     }
+    const roles = user.roles.map((assignment) => assignment.role.key).sort();
+    const overrides = user.permissionOverrides;
+    const permissions: Permission[] = effectivePermissions(user.kind, roles, {
+      grants: overrides.filter((o) => o.effect === 'grant').map((o) => o.permission),
+      revokes: overrides.filter((o) => o.effect === 'revoke').map((o) => o.permission),
+    });
     return {
       kind: 'user',
       sub: user.id,
       sid: sessionId,
       tenantId: user.tenantId,
       clientOrgId: user.clientOrgId,
-      roles: user.roles.map((assignment) => assignment.role.key).sort(),
+      roles,
+      permissions,
     };
   }
 

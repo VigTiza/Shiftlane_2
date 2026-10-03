@@ -92,10 +92,15 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
   versiona). `app.db.app` respeta RLS y siempre se usa dentro de
   `withDbContext(db.app, { tenantId, clientOrgId, userId }, (tx) => ...)`. `app.db.system`
   se salta RLS: solo autenticación, tareas programadas y consola de plataforma.
-- Autenticación (docs/decisiones/0004): `preHandler: requireAuth(app, { kinds, roles })`
-  y `authOf(request, 'user')` para leer la sesión; `dbContextOf(auth)` da el contexto de BD.
-- Tabla nueva = `tenant_id` + `ENABLE ROW LEVEL SECURITY` + políticas `TO shiftlane_app` en
-  la misma migración (la prueba test/security/tenant-isolation.test.ts lo exige).
+- Autorización por acción (docs/api.md): rutas de usuarios web con
+  `preHandler: requirePermission(app, 'drivers.enroll')`; choferes/pasajeros con
+  `requireAuth(app, { kinds: [...] })`. Permisos nuevos se agregan en
+  packages/shared/src/permissions.ts y luego `pnpm docs:permisos`.
+- En los handlers: `withDbContext(app.db.app, dbContextOf(request), (tx) => ...)` (contexto,
+  actor, request id e IP para la bitácora); `authOf(request, 'user')` para leer la sesión.
+- Tabla nueva = `tenant_id` + `ENABLE ROW LEVEL SECURITY` + políticas `TO shiftlane_app` +
+  `SELECT app.enable_audit('tabla', ARRAY[columnas_sin_importancia])` en la misma migración
+  (test/security/tenant-isolation.test.ts y auditoria.test.ts lo exigen).
 - Migración nueva: editar prisma/schema.prisma, `pnpm --filter @shiftlane/api db:migrate:new`,
   agregar el SQL de RLS al migration.sql generado y aplicar con `db:migrate`.
   Datos de ejemplo en prisma/seed.ts (`pnpm db:seed`).
