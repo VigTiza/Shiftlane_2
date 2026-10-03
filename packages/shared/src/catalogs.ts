@@ -98,3 +98,50 @@ export function documentStatus(
 export function daysUntil(expiresOn: string, today: string): number {
   return daysBetween(today, expiresOn);
 }
+
+// --- Programación y solicitudes de la planta ---------------------------------------------
+
+export const TRIP_STATUSES = ['scheduled', 'in_progress', 'completed', 'cancelled'] as const;
+export type TripStatus = (typeof TRIP_STATUSES)[number];
+
+export const TRIP_STATUS_LABELS: Record<TripStatus, string> = {
+  scheduled: 'Programado',
+  in_progress: 'En curso',
+  completed: 'Terminado',
+  cancelled: 'Cancelado',
+};
+
+export const EXTRA_TRIP_REASONS = ['overtime', 'shift_change', 'event', 'other'] as const;
+export type ExtraTripReason = (typeof EXTRA_TRIP_REASONS)[number];
+
+export const EXTRA_TRIP_REASON_LABELS: Record<ExtraTripReason, string> = {
+  overtime: 'Tiempo extra',
+  shift_change: 'Cambio de turno',
+  event: 'Evento',
+  other: 'Otro',
+};
+
+export const CLIENT_REQUEST_TYPES = [
+  'extra_trip',
+  'schedule_change',
+  'route_change',
+  'other',
+] as const;
+export type ClientRequestType = (typeof CLIENT_REQUEST_TYPES)[number];
+
+export const CLIENT_REQUEST_TYPE_LABELS: Record<ClientRequestType, string> = {
+  extra_trip: 'Viaje extra',
+  schedule_change: 'Cambio de horario o turno',
+  route_change: 'Cambio de ruta o parada',
+  other: 'Otra solicitud',
+};
+
+export const CLIENT_REQUEST_STATUSES = ['pending', 'approved', 'rejected', 'cancelled'] as const;
+export type ClientRequestStatus = (typeof CLIENT_REQUEST_STATUSES)[number];
+
+export const CLIENT_REQUEST_STATUS_LABELS: Record<ClientRequestStatus, string> = {
+  pending: 'Pendiente',
+  approved: 'Aprobada',
+  rejected: 'Rechazada',
+  cancelled: 'Cancelada',
+};

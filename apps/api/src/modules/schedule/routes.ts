@@ -9,11 +9,13 @@ import {
   assignmentResponse,
   autoAssignBody,
   autoAssignResponse,
+  cancelTripBody,
   conflictsQuery,
   conflictsResponse,
   copyWeekBody,
   copyWeekResponse,
   createHolidayBody,
+  extraTripBody,
   generateBody,
   generationResult,
   holidaySummary,
@@ -22,6 +24,7 @@ import {
   listHolidaysQuery,
   listTripsQuery,
   tripPage,
+  tripSummary,
   updateHolidayBody,
 } from './schemas.ts';
 
@@ -31,6 +34,7 @@ export const scheduleRoutes: FastifyPluginCallbackZod = (app, _options, done) =>
   const service = app.schedule;
   const canRead = requirePermission(app, 'schedule.read');
   const canWrite = requirePermission(app, 'schedule.write');
+  const canCancel = requirePermission(app, 'schedule.write', 'dispatch.operate');
   // La planta ve los viajes de sus transportistas (la seguridad por filas filtra cuáles).
   const canReadTrips = requirePermission(app, 'schedule.read', 'plant.dashboard');
   const canReadHolidays = requirePermission(app, 'schedule.read', 'settings.manage');
@@ -71,6 +75,49 @@ export const scheduleRoutes: FastifyPluginCallbackZod = (app, _options, done) =>
     },
     (request) =>
       withDbContext(app.db.app, dbContextOf(request), (tx) => service.listTrips(tx, request.query)),
+  );
+
+  app.post(
+    '/trips/extra',
+    {
+      onRequest: canWrite,
+      schema: {
+        tags: TAGS,
+        summary: 'Crea un viaje extraordinario (tiempo extra, cambio de turno, evento)',
+        description:
+          'Puede basarse en una ruta (paradas y recorrido) o ir sin ruta. Si se indica chofer o unidad, revisa conflictos como la asignación normal.',
+        body: extraTripBody,
+        response: { 201: assignmentResponse },
+      },
+    },
+    async (request, reply) => {
+      const { startTime, endTime, ...body } = request.body;
+      const result = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
+        service.createExtra(tx, tenantIdOf(request), authOf(request, 'user').sub, {
+          ...body,
+          times: { start: startTime, end: endTime },
+        }),
+      );
+      return reply.status(201).send(result);
+    },
+  );
+
+  app.post(
+    '/trips/:id/cancel',
+    {
+      onRequest: canCancel,
+      schema: {
+        tags: TAGS,
+        summary: 'Cancela un viaje programado (la generación automática no lo reactiva)',
+        params: idParams,
+        body: cancelTripBody,
+        response: { 200: tripSummary },
+      },
+    },
+    (request) =>
+      withDbContext(app.db.app, dbContextOf(request), (tx) =>
+        service.cancel(tx, tenantIdOf(request), request.params.id, request.body.reason),
+      ),
   );
 
   app.put(

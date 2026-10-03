@@ -1,4 +1,4 @@
-import { dateString } from '../../lib/http-schemas.ts';
+import { dateString, optionalText } from '../../lib/http-schemas.ts';
 import { z } from '../../lib/zod.ts';
 import { CONFLICT_TYPES } from './conflicts.ts';
 
@@ -70,6 +70,10 @@ export const tripSummary = z.object({
   vehicleNumber: z.string().nullable(),
   /** habitual (programación), manual (usuario) o copied (semana anterior). */
   assignmentSource: z.enum(['habitual', 'manual', 'copied']).nullable(),
+  extraReason: z.enum(['overtime', 'shift_change', 'event', 'other']).nullable(),
+  requestedPassengers: z.number().int().nullable(),
+  clientRequestId: z.uuid().nullable(),
+  notes: z.string().nullable(),
 });
 
 export const tripPage = z.object({
@@ -239,4 +243,33 @@ export const copyWeekResponse = z.object({
   copied: z.number().int(),
   unchanged: z.number().int(),
   skipped: z.array(skippedAssignment),
+});
+
+// --- Viajes extraordinarios -----------------------------------------------------------
+
+export const timeSchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Usa el formato de 24 horas HH:MM.');
+export const extraReasonSchema = z.enum(['overtime', 'shift_change', 'event', 'other']);
+
+export const extraTripBody = z.object({
+  plantId: z.uuid(),
+  direction: z.enum(['inbound', 'outbound']),
+  serviceDate: dateString,
+  /** Salida y llegada HH:MM; si la llegada es menor, termina al día siguiente. */
+  startTime: timeSchema,
+  endTime: timeSchema,
+  /** Ruta de referencia (paradas y recorrido). */
+  routeId: z.uuid().nullable().optional(),
+  reason: extraReasonSchema,
+  passengers: z.number().int().min(1).max(500).nullable().optional(),
+  notes: optionalText(500),
+  driverId: z.uuid().nullable().optional(),
+  vehicleId: z.uuid().nullable().optional(),
+  /** Confirma la asignación aunque tenga conflictos que bloquean. */
+  force: z.boolean().default(false),
+});
+
+export const cancelTripBody = z.object({
+  reason: z.string().trim().min(3, 'Escribe el motivo de la cancelación.').max(300),
 });

@@ -49,6 +49,7 @@ import { healthRoutes } from './modules/health/routes.ts';
 import { invitationRoutes } from './modules/invitations/routes.ts';
 import { leadRoutes } from './modules/leads/routes.ts';
 import { passengerRoutes } from './modules/passengers/routes.ts';
+import { requestRoutes } from './modules/requests/routes.ts';
 import { routeRoutes } from './modules/routes/routes.ts';
 import { scheduleRoutes } from './modules/schedule/routes.ts';
 import { createScheduleService } from './modules/schedule/service.ts';
@@ -228,6 +229,7 @@ export async function buildApp({ env, db, mailer, storage, routing }: BuildAppOp
   await app.register(passengerRoutes);
   await app.register(routeRoutes);
   await app.register(scheduleRoutes);
+  await app.register(requestRoutes);
 
   return app;
 }

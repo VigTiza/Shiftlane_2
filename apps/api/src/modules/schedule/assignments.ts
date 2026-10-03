@@ -89,7 +89,9 @@ export async function loadSnapshot(
     driverId: row.driverId,
     vehicleId: row.vehicleId,
     assignmentSource: row.assignmentSource,
-    passengers: row.routeId ? (passengersByRoute.get(row.routeId) ?? 0) : 0,
+    // Viajes extra: los pasajeros estimados; si no, los asignados a la ruta.
+    passengers:
+      row.requestedPassengers ?? (row.routeId ? (passengersByRoute.get(row.routeId) ?? 0) : 0),
     habitualDriverId: row.route?.habitualDriverId ?? null,
     habitualVehicleId: row.route?.habitualVehicleId ?? null,
   }));

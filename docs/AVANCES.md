@@ -1,9 +1,9 @@
 # AVANCES — Shiftlane
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
-- Fase actual: F04 — Programación de servicios
-- Último prompt completado: F04-P02 Asignación y conflictos
-- Siguiente prompt: F04-P03 Viajes extraordinarios y solicitudes
+- Fase actual: F05 — Operación de viajes y tiempo real
+- Último prompt completado: F04-P03 Viajes extraordinarios y solicitudes (fase F04 terminada)
+- Siguiente prompt: F05-P01 Ciclo de vida del viaje
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -18,6 +18,8 @@
     Flutter en GitHub). Revisar el resultado tras cada push.
   - Tareas programadas: hoy corren dentro de la API (temporizador + candado de PostgreSQL).
     Pasarlas a BullMQ cuando Redis esté disponible (tras el reinicio y Docker).
+  - Avisos de solicitudes de la planta (despachador y gerente) con el motor de
+    notificaciones (F14-P01).
   - Deuda técnica: varios servicios usan Promise.all dentro de transacciones (pg avisa que
     pg@9 lo prohibirá); volverlos secuenciales antes de actualizar pg.
   - La API de desarrollo se puede levantar con `node src/server.ts` en apps/api (puerto
@@ -113,7 +115,32 @@
 - 2026-10-03 Un documento vence al terminar su fecha de vencimiento; si hay varios del mismo
   tipo cuenta el más reciente. Los de tipo «otro» no bloquean.
 
+- 2026-10-03 Solicitudes de la planta en client_requests (una tabla para viaje extra, cambio
+  de horario, de ruta u otra). Solo la planta crea y cancela; solo la transportista destinataria
+  aprueba o rechaza. Aprobar un viaje extra crea el viaje en la misma transacción: si la
+  asignación falla, la solicitud sigue pendiente. Los viajes extra no los toca la generación.
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F04-P03 Viajes extraordinarios y solicitudes
+- Hecho: migración client_requests (RLS: la transportista ve las suyas, la planta las que hizo
+  con acuerdo vigente; sin DELETE; auditoría) y campos de viaje extra en trips (motivo,
+  solicitud, pasajeros estimados, creado por). Viajes extra manuales con o sin ruta (horario
+  propio o calculado con la hora en planta y el recorrido; cruzan la medianoche) y asignación
+  opcional con conflictos; cancelación manual de viajes. Módulo requests: transportistas de la
+  planta, crear, listar, detalle, cancelar, aprobar (crea el viaje) y rechazar. Etiquetas en
+  shared (estados de viaje, motivos y tipos/estados de solicitud).
+- Archivos principales: apps/api/src/modules/requests/*, src/modules/schedule/extra-trips.ts,
+  prisma/migrations/*_client_requests, packages/shared/src/catalogs.ts.
+- Pruebas agregadas / resultado: 12 de integración (flujo completo planta → aprobación →
+  viaje visible para ambos, validaciones, horario por omisión y explícito, conflicto que
+  impide aprobar y confirmación, rechazo con respuesta, aprobación sin viaje, cancelación,
+  aislamiento entre transportistas y plantas, varias transportistas, viaje extra manual que
+  cruza la medianoche y su cancelación, validaciones, conflictos con viajes extra). 274
+  pruebas de la API en verde.
+- Problemas encontrados y cómo se resolvieron: ninguno relevante.
+- Pendiente para después: avisos a despacho y gerencia al llegar una solicitud (motor de
+  notificaciones, F14-P01); pantallas en el portal (F09-P02) y en el panel (F08-P04).
+
 ### 2026-10-03 — F04-P02 Asignación y conflictos
 - Hecho: migración assignments (trips.driver_id, vehicle_id, assignment_source, assigned_at,
   assigned_by; routes.habitual_driver_id/habitual_vehicle_id; vehicles.required_license_type).

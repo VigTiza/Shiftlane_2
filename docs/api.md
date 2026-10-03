@@ -205,6 +205,13 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 | POST | /schedule/auto-assign | `schedule.write` | Chofer y unidad habituales a los viajes sin asignar (no toca manuales ni copiados) |
 | POST | /schedule/copy-week | `schedule.write` | Copia la asignación de una semana (lunes) a otra; respeta manuales salvo `overwrite` |
 | GET | /schedule/conflicts?from=&to=&plantId=&routeId=&severity= | `schedule.read` | Conflictos con sugerencia de solución (máx. 31 días) |
+| POST | /trips/extra | `schedule.write` | Viaje extraordinario (tiempo extra, cambio de turno, evento), con o sin ruta; asignación opcional |
+| POST | /trips/:id/cancel | `schedule.write` o `dispatch.operate` | Cancela un viaje programado con motivo (la generación no lo reactiva) |
+| GET | /plant/carriers | `plant.requests` o `plant.dashboard` | Transportistas con acuerdo activo y las plantas que atienden |
+| GET/POST | /client-requests | `requests.manage` o `plant.requests` / `plant.requests` | Solicitudes de la planta: viaje extra, cambio de horario o de ruta, otra |
+| GET | /client-requests/:id | `requests.manage` o `plant.requests` | Detalle con el viaje generado |
+| POST | /client-requests/:id/cancel | `plant.requests` | La planta cancela una solicitud pendiente |
+| POST | /client-requests/:id/approve, /reject | `requests.manage` | Aprobar (un viaje extra crea el viaje) o rechazar con respuesta |
 | GET | /trips?from=&to=&plantId=&routeId=&status=&kind= | `schedule.read` o `plant.dashboard` | Viajes de un rango (por omisión, esta semana); la planta ve los de sus transportistas |
 | GET/POST | /holidays | `schedule.read` / `schedule.write` o `settings.manage` | Días festivos del año, generales o por planta |
 | PATCH/DELETE | /holidays/:id | `schedule.write` o `settings.manage` | Cambiar nombre o si hay servicio; eliminar (ajusta los viajes) |
@@ -238,6 +245,13 @@ verificación; examen médico, antidoping, capacitación), licencia ausente, ven
 tipo que el que exige la unidad (`requiredLicenseType`), chofer inactivo. Avisos (`warning`):
 capacidad menor que los pasajeros asignados a la ruta y viaje sin asignar. Cada conflicto trae
 una sugerencia con opciones (choferes o unidades libres y en regla).
+
+Solicitudes de la planta: la planta elige su transportista (si tiene una sola, se toma esa) y
+pide un viaje extra con fecha, sentido, hora en planta (llegada si es de entrada, salida si es
+de salida), pasajeros estimados y ruta de referencia opcional. Al aprobar, el horario sale de
+la hora en planta y el tiempo de recorrido de la ruta (60 minutos sin ruta) o del que indique
+la transportista; si la asignación tiene conflictos que bloquean no se aprueba nada (409),
+salvo con `force`. Cada transportista ve solo las solicitudes dirigidas a ella.
 
 Credencial QR del pasajero: `SL1.<datos en base64url>.<firma Ed25519>`; los datos llevan
 credencial, pasajero, empresa y un valor aleatorio que cambia al reemitirla.

@@ -43,6 +43,7 @@ model Tenant {
   serviceAgreements   ServiceAgreement[]
   createdClientOrgs   ClientOrg[]              @relation("ClientOrgCreatedBy")
   drivers             Driver[]
+  clientRequests      ClientRequest[]
   driverPins          DriverPin[]
   driverEnrollments   DriverEnrollment[]
   devices             Device[]
@@ -301,6 +302,8 @@ model ClientOrg {
   provisionalBadges    ProvisionalBadge[]
   passengerImports     PassengerImport[]
 
+  clientRequests ClientRequest[]
+
   @@index([createdByTenantId])
   @@map("client_orgs")
 }
@@ -332,6 +335,7 @@ model Plant {
   routes            Route[]
   holidays          Holiday[]
   trips             Trip[]
+  clientRequests    ClientRequest[]
 
   @@unique([id, clientOrgId])
   @@index([clientOrgId])
@@ -1030,6 +1034,7 @@ model Route {
   rates            Rate[]
   passengers       RoutePassenger[]
   trips            Trip[]
+  clientRequests   ClientRequest[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -1218,39 +1223,45 @@ enum TripAssignmentSource {
 
 /// Viaje programado. Los regulares los genera el sistema (generation_key = ruta + día).
 model Trip {
-  id                String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId          String                @map("tenant_id") @db.Uuid
-  plantId           String                @map("plant_id") @db.Uuid
-  routeId           String?               @map("route_id") @db.Uuid
-  routeVersionId    String?               @map("route_version_id") @db.Uuid
-  shiftId           String?               @map("shift_id") @db.Uuid
-  temporaryChangeId String?               @map("temporary_change_id") @db.Uuid
-  kind              TripKind              @default(regular)
-  status            TripStatus            @default(scheduled)
-  direction         RouteDirection
-  serviceDate       DateTime              @map("service_date") @db.Date
-  scheduledStartAt  DateTime              @map("scheduled_start_at") @db.Timestamptz(3)
-  scheduledEndAt    DateTime              @map("scheduled_end_at") @db.Timestamptz(3)
-  isHoliday         Boolean               @default(false) @map("is_holiday")
-  driverId          String?               @map("driver_id") @db.Uuid
-  vehicleId         String?               @map("vehicle_id") @db.Uuid
-  assignmentSource  TripAssignmentSource? @map("assignment_source")
-  assignedAt        DateTime?             @map("assigned_at") @db.Timestamptz(3)
-  assignedByUserId  String?               @map("assigned_by_user_id") @db.Uuid
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String                @map("tenant_id") @db.Uuid
+  plantId             String                @map("plant_id") @db.Uuid
+  routeId             String?               @map("route_id") @db.Uuid
+  routeVersionId      String?               @map("route_version_id") @db.Uuid
+  shiftId             String?               @map("shift_id") @db.Uuid
+  temporaryChangeId   String?               @map("temporary_change_id") @db.Uuid
+  kind                TripKind              @default(regular)
+  status              TripStatus            @default(scheduled)
+  direction           RouteDirection
+  serviceDate         DateTime              @map("service_date") @db.Date
+  scheduledStartAt    DateTime              @map("scheduled_start_at") @db.Timestamptz(3)
+  scheduledEndAt      DateTime              @map("scheduled_end_at") @db.Timestamptz(3)
+  isHoliday           Boolean               @default(false) @map("is_holiday")
+  driverId            String?               @map("driver_id") @db.Uuid
+  vehicleId           String?               @map("vehicle_id") @db.Uuid
+  assignmentSource    TripAssignmentSource? @map("assignment_source")
+  assignedAt          DateTime?             @map("assigned_at") @db.Timestamptz(3)
+  assignedByUserId    String?               @map("assigned_by_user_id") @db.Uuid
+  /// Viajes extra: motivo, solicitud de la planta que lo originó y pasajeros estimados.
+  extraReason         ExtraTripReason?      @map("extra_reason")
+  clientRequestId     String?               @map("client_request_id") @db.Uuid
+  requestedPassengers Int?                  @map("requested_passengers")
+  createdByUserId     String?               @map("created_by_user_id") @db.Uuid
   /// Llave de idempotencia de los viajes regulares: "<ruta>:<AAAA-MM-DD>".
-  generationKey     String?               @unique @map("generation_key")
-  cancelReason      String?               @map("cancel_reason")
-  notes             String?
-  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt         DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  generationKey       String?               @unique @map("generation_key")
+  cancelReason        String?               @map("cancel_reason")
+  notes               String?
+  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  plant        Plant         @relation(fields: [plantId], references: [id], onDelete: Restrict)
-  route        Route?        @relation(fields: [routeId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  routeVersion RouteVersion? @relation(fields: [routeVersionId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  shift        Shift?        @relation(fields: [shiftId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  driver       Driver?       @relation(fields: [driverId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  vehicle      Vehicle?      @relation(fields: [vehicleId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  plant         Plant          @relation(fields: [plantId], references: [id], onDelete: Restrict)
+  route         Route?         @relation(fields: [routeId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  routeVersion  RouteVersion?  @relation(fields: [routeVersionId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  shift         Shift?         @relation(fields: [shiftId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  driver        Driver?        @relation(fields: [driverId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  vehicle       Vehicle?       @relation(fields: [vehicleId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  clientRequest ClientRequest? @relation(fields: [clientRequestId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@index([tenantId, serviceDate])
@@ -1259,4 +1270,73 @@ model Trip {
   @@index([routeId, serviceDate])
   @@index([plantId, serviceDate])
   @@map("trips")
+}
+
+// ---------------------------------------------------------------------------
+// Solicitudes de la planta y viajes extraordinarios (F04-P03)
+// ---------------------------------------------------------------------------
+
+/// Motivo de un viaje extraordinario.
+enum ExtraTripReason {
+  /// Tiempo extra.
+  overtime
+  /// Cambio de turno.
+  shift_change
+  /// Evento especial.
+  event
+  other
+}
+
+enum ClientRequestType {
+  extra_trip
+  schedule_change
+  route_change
+  other
+}
+
+enum ClientRequestStatus {
+  pending
+  approved
+  rejected
+  cancelled
+}
+
+/// Solicitud de una planta a una de sus transportistas. La planta la crea y la puede cancelar
+/// mientras está pendiente; la transportista la aprueba o rechaza con una respuesta. Un viaje
+/// extra aprobado crea el viaje.
+model ClientRequest {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String              @map("tenant_id") @db.Uuid
+  clientOrgId       String              @map("client_org_id") @db.Uuid
+  plantId           String              @map("plant_id") @db.Uuid
+  type              ClientRequestType
+  status            ClientRequestStatus @default(pending)
+  title             String
+  description       String?
+  /// Viaje extra: fecha, sentido y hora en planta (llegada si es de entrada, salida si es de salida).
+  serviceDate       DateTime?           @map("service_date") @db.Date
+  direction         RouteDirection?
+  plantTime         String?             @map("plant_time")
+  /// Pasajeros estimados (solo el número; sin datos personales).
+  passengers        Int?
+  /// Ruta de referencia para el recorrido.
+  routeId           String?             @map("route_id") @db.Uuid
+  extraReason       ExtraTripReason?    @map("extra_reason")
+  requestedByUserId String?             @map("requested_by_user_id") @db.Uuid
+  response          String?
+  respondedByUserId String?             @map("responded_by_user_id") @db.Uuid
+  respondedAt       DateTime?           @map("responded_at") @db.Timestamptz(3)
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  clientOrg ClientOrg @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
+  plant     Plant     @relation(fields: [plantId, clientOrgId], references: [id, clientOrgId], onDelete: Restrict)
+  route     Route?    @relation(fields: [routeId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  trips     Trip[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, status])
+  @@index([clientOrgId, status])
+  @@map("client_requests")
 }

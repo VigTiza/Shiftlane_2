@@ -16,6 +16,8 @@ import {
 } from './assignments.ts';
 import { blocking } from './conflicts.ts';
 import type { ConflictSeverity } from './conflicts.ts';
+import { cancelTrip, createExtraTrip } from './extra-trips.ts';
+import type { ExtraTripInput } from './extra-trips.ts';
 import { generateTrips } from './generator.ts';
 import { MAX_CONFLICT_DAYS, MAX_GENERATION_DAYS, MAX_LIST_DAYS } from './schemas.ts';
 
@@ -109,6 +111,47 @@ export function createScheduleService(deps: { horizonDays: number; timeZone: str
       return { from, to, ...result, assigned: assignment.assigned };
     },
 
+    /** Un viaje del listado (con nombres de ruta, chofer y unidad). */
+    async tripSummary(tx: DbTransaction, tripId: string) {
+      const trip = await tx.trip.findFirst({
+        where: { id: tripId },
+        select: { serviceDate: true },
+      });
+      if (!trip) throw new NotFoundError('No se encontró el viaje.');
+      const date = fromDbDate(trip.serviceDate)!;
+      const listed = await this.listTrips(tx, { from: date, to: date, page: 1, pageSize: 500 });
+      return listed.items.find((t) => t.id === tripId)!;
+    },
+
+    // --- Viajes extraordinarios ------------------------------------------------------
+
+    /** Crea un viaje extra y, si se indica, le asigna chofer y unidad revisando conflictos. */
+    async createExtra(
+      tx: DbTransaction,
+      tenantId: string,
+      userId: string,
+      input: ExtraTripInput & {
+        driverId?: string | null | undefined;
+        vehicleId?: string | null | undefined;
+        force: boolean;
+      },
+    ) {
+      const trip = await createExtraTrip(tx, tenantId, userId, input);
+      if (input.driverId || input.vehicleId) {
+        return this.assign(tx, tenantId, userId, trip.id, {
+          driverId: input.driverId ?? null,
+          vehicleId: input.vehicleId ?? null,
+          force: input.force,
+        });
+      }
+      return { trip: await this.tripSummary(tx, trip.id), conflicts: [] };
+    },
+
+    async cancel(tx: DbTransaction, tenantId: string, tripId: string, reason: string) {
+      await cancelTrip(tx, tenantId, tripId, reason);
+      return this.tripSummary(tx, tripId);
+    },
+
     // --- Asignación de unidad y chofer -----------------------------------------------
 
     async assign(
@@ -157,8 +200,7 @@ export function createScheduleService(deps: { horizonDays: number; timeZone: str
         );
       }
       await saveAssignment(tx, tripId, { driverId, vehicleId, source: 'manual', userId });
-      const listed = await this.listTrips(tx, { from: date, to: date, page: 1, pageSize: 500 });
-      return { trip: listed.items.find((t) => t.id === tripId)!, conflicts };
+      return { trip: await this.tripSummary(tx, tripId), conflicts };
     },
 
     async autoAssign(
@@ -335,6 +377,10 @@ export function createScheduleService(deps: { horizonDays: number; timeZone: str
           vehicleId: trip.vehicleId,
           vehicleNumber: trip.vehicle?.economicNumber ?? null,
           assignmentSource: trip.assignmentSource,
+          extraReason: trip.extraReason,
+          requestedPassengers: trip.requestedPassengers,
+          clientRequestId: trip.clientRequestId,
+          notes: trip.notes,
         })),
       };
     },
