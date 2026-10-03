@@ -51,6 +51,7 @@ model Tenant {
   boardings           Boarding[]
   incidents           Incident[]
   panicEvents         PanicEvent[]
+  deviceSyncEvents    DeviceSyncEvent[]
   driverPins          DriverPin[]
   driverEnrollments   DriverEnrollment[]
   devices             Device[]
@@ -466,20 +467,24 @@ model DriverEnrollment {
 
 /// Celular registrado. Se autentica con un secreto que solo conoce la app (se guarda su hash).
 model Device {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId   String    @map("tenant_id") @db.Uuid
-  secretHash String    @map("secret_hash")
-  platform   String?
-  model      String?
-  appVersion String?   @map("app_version")
-  lastSeenAt DateTime? @map("last_seen_at") @db.Timestamptz(3)
-  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(3)
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  secretHash    String    @map("secret_hash")
+  platform      String?
+  model         String?
+  appVersion    String?   @map("app_version")
+  lastSeenAt    DateTime? @map("last_seen_at") @db.Timestamptz(3)
+  /// Última sincronización y desfase de su reloj (hora del servidor menos hora del celular).
+  lastSyncAt    DateTime? @map("last_sync_at") @db.Timestamptz(3)
+  clockOffsetMs Int?      @map("clock_offset_ms")
+  revokedAt     DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  drivers  DriverDevice[]
-  sessions Session[]
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  drivers    DriverDevice[]
+  sessions   Session[]
+  syncEvents DeviceSyncEvent[]
 
   @@unique([id, tenantId])
   @@index([tenantId])
@@ -1588,4 +1593,41 @@ model PanicEvent {
 
   @@index([tenantId, acknowledgedAt])
   @@map("panic_events")
+}
+
+// ---------------------------------------------------------------------------
+// Sincronización sin señal (F05-P02)
+// ---------------------------------------------------------------------------
+
+enum SyncEventStatus {
+  applied
+  rejected
+}
+
+/// Bitácora de eventos recibidos por sincronización. (device_id, event_id) evita procesar dos
+/// veces el mismo evento y permite responder igual a un lote repetido.
+model DeviceSyncEvent {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String          @map("tenant_id") @db.Uuid
+  deviceId         String          @map("device_id") @db.Uuid
+  driverId         String          @map("driver_id") @db.Uuid
+  /// UUID que generó el celular.
+  eventId          String          @map("event_id") @db.Uuid
+  type             String
+  sequence         Int?
+  tripId           String?         @map("trip_id") @db.Uuid
+  /// Hora del celular y hora corregida con el desfase de su reloj.
+  deviceOccurredAt DateTime        @map("device_occurred_at") @db.Timestamptz(3)
+  occurredAt       DateTime        @map("occurred_at") @db.Timestamptz(3)
+  receivedAt       DateTime        @default(now()) @map("received_at") @db.Timestamptz(3)
+  status           SyncEventStatus
+  message          String?
+  result           Json?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  device Device @relation(fields: [deviceId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([deviceId, eventId])
+  @@index([tenantId, receivedAt])
+  @@map("device_sync_events")
 }

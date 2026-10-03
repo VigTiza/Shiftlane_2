@@ -2,8 +2,8 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F05 — Operación de viajes y tiempo real
-- Último prompt completado: F05-P01 Ciclo de vida del viaje
-- Siguiente prompt: F05-P02 Sincronización sin señal (idempotente)
+- Último prompt completado: F05-P02 Sincronización sin señal (idempotente)
+- Siguiente prompt: F05-P03 Ingesta GPS y posiciones
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -127,7 +127,29 @@
   viaje sigue. La planta ve la evidencia de sus viajes (historial, abordajes, incidentes y
   fotos), no el checklist ni el pánico.
 
+- 2026-10-03 Sincronización: bitácora device_sync_events por (celular, evento) para responder
+  igual a un lote repetido; los rechazos también se guardan, los «reintentar» no. Un evento
+  por transacción para que los lotes parciales apliquen lo válido. El desfase del reloj se
+  calcula por lote y se guarda en devices (sin auditar ese cambio).
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F05-P02 Sincronización sin señal
+- Hecho: migración sync (device_sync_events inmutable con RLS; last_sync_at y clock_offset_ms
+  en devices, fuera de la auditoría). POST /sync/batch: sobre por evento validado uno a uno,
+  orden por contador u hora, duplicados dentro del lote, entre lotes y entre celulares,
+  corrección de hora, eventos tardíos aceptados si ocurrieron antes del fin del viaje,
+  «reintentar» si falta el inicio, límite de 1000 eventos y 5 MB.
+- Archivos principales: apps/api/src/modules/sync/*, src/modules/trips/driver-service.ts
+  (opción allowLate), prisma/migrations/*_sync.
+- Pruebas agregadas / resultado: 8 de integración (viaje completo con reloj atrasado, lote
+  repetido, lote desordenado y ordenado por hora, llegadas tardías válidas y fuera de tiempo,
+  reintento sin inicio, lote parcial con motivos y reenvío, repetidos en el lote y desde otro
+  celular, lote de 252 eventos y límite de 1000, solo choferes). 299 pruebas de la API en verde.
+- Problemas encontrados y cómo se resolvieron: la capacidad de una unidad está limitada a 120
+  por la base (se ajustó la prueba).
+- Pendiente para después: posiciones GPS en lote (F05-P03); la app Flutter guarda y envía
+  los eventos (F07-P05).
+
 ### 2026-10-03 — F05-P01 Ciclo de vida del viaje
 - Hecho: migración trip_execution (trip_events, checklist_templates, checklist_results,
   trip_photos, boardings, incidents, panic_events; tiempos reales, llegada por puerta y

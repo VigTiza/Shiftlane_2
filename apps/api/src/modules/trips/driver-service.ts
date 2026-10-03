@@ -11,6 +11,7 @@ import type { Prisma, Trip, TripEventType } from '../../generated/prisma/client.
 import type { createPassengersService } from '../passengers/service.ts';
 import type { RoutesService } from '../routes/service.ts';
 import { assertCan, startWindowOpensAt } from './lifecycle.ts';
+import type { TripAction } from './lifecycle.ts';
 
 type PassengersService = ReturnType<typeof createPassengersService>;
 
@@ -79,6 +80,31 @@ function occurredAt(input: ActionInput, now = new Date()) {
     return now;
   }
   return input.occurredAt;
+}
+
+export interface LateOptions {
+  /**
+   * Sincronización sin señal: acepta paradas, escaneos, QR de puerta e incidentes de un viaje
+   * ya terminado si ocurrieron antes de terminarlo (llegaron tarde por falta de señal).
+   */
+  allowLate?: boolean;
+}
+
+const LATE_ACTIONS: readonly TripAction[] = ['arrive_stop', 'scan', 'gate', 'incident'];
+
+function assertCanAt(
+  trip: Pick<Trip, 'status' | 'actualEndAt'>,
+  action: TripAction,
+  at: Date,
+  options: LateOptions,
+) {
+  const lateButValid =
+    options.allowLate &&
+    LATE_ACTIONS.includes(action) &&
+    trip.status === 'completed' &&
+    trip.actualEndAt !== null &&
+    at <= trip.actualEndAt;
+  if (!lateButValid) assertCan(trip.status, action);
 }
 
 export function parseChecklistItems(value: Prisma.JsonValue): ChecklistItem[] {
@@ -434,10 +460,11 @@ export function createDriverTripsService(deps: {
       session: DriverSession,
       tripId: string,
       input: ActionInput & { stopId: string },
+      options: LateOptions = {},
     ) {
       const trip = await driverTrip(tx, session, tripId);
       if (await previousEvent(tx, tripId, input)) return state(tx, tripId, true);
-      assertCan(trip.status, 'arrive_stop');
+      assertCanAt(trip, 'arrive_stop', occurredAt(input), options);
       const stop = trip.routeVersionId
         ? await tx.stop.findFirst({
             where: { id: input.stopId, routeVersionId: trip.routeVersionId },
@@ -470,11 +497,12 @@ export function createDriverTripsService(deps: {
         codeType?: 'barcode' | 'qr' | undefined;
         employeeNumber?: string | undefined;
       },
+      options: LateOptions = {},
     ) {
       const trip = await driverTrip(tx, session, tripId);
       const previous = await previousEvent(tx, tripId, input);
       if (previous) return { ...(previous.data as unknown as ScanResponse), duplicate: true };
-      assertCan(trip.status, 'scan');
+      assertCanAt(trip, 'scan', occurredAt(input), options);
 
       let method: 'shiftlane_qr' | 'badge' | 'manual' = 'manual';
       let passenger: {
@@ -637,6 +665,7 @@ export function createDriverTripsService(deps: {
         description?: string | null | undefined;
         photoIds: string[];
       },
+      options: LateOptions = {},
     ) {
       const trip = await driverTrip(tx, session, tripId);
       if (input.clientEventId) {
@@ -645,7 +674,7 @@ export function createDriverTripsService(deps: {
         });
         if (previous) return { id: previous.id, status: previous.status, duplicate: true };
       }
-      assertCan(trip.status, 'incident');
+      assertCanAt(trip, 'incident', occurredAt(input), options);
       await assertPhotos(tx, tripId, input.photoIds);
       const incident = await tx.incident.create({
         data: {
@@ -716,10 +745,11 @@ export function createDriverTripsService(deps: {
       session: DriverSession,
       tripId: string,
       input: ActionInput & { code: string },
+      options: LateOptions = {},
     ) {
       const trip = await driverTrip(tx, session, tripId);
       if (await previousEvent(tx, tripId, input)) return state(tx, tripId, true);
-      assertCan(trip.status, 'gate');
+      assertCanAt(trip, 'gate', occurredAt(input), options);
       const qrCode = input.code.startsWith(GATE_QR_PREFIX)
         ? input.code.slice(GATE_QR_PREFIX.length)
         : input.code;

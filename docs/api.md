@@ -221,6 +221,7 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 | POST | /driver/trips/:id/scan | chofer | Escanear credencial QR, gafete o número de empleado; parada por ubicación; sobrecupo |
 | POST | /driver/trips/:id/incidents | chofer | Incidente con tipo, fotos y ubicación |
 | POST | /driver/panic | chofer | Pánico con o sin viaje |
+| POST | /sync/batch | chofer | Lote de eventos guardados sin señal (hasta 1000); resultado por evento |
 | GET | /trips/:id | `schedule.read`, `monitoring.view`, `plant.evidence` o `plant.dashboard` | Detalle con evidencia: historial, checklist, abordajes, incidentes, fotos |
 | GET | /trips/:id/photos/:photoId | igual que el detalle | Foto del viaje |
 | POST | /trips/:id/checklist-exception | `dispatch.operate` | Autoriza salir con el checklist sin aprobar |
@@ -280,6 +281,17 @@ acepta `clientEventId` (UUID del celular) para que un reenvío no duplique nada;
 es la hora del celular (si viene adelantada se usa la del servidor). El escaneo responde
 `ok`, `other_route`, `unregistered` (gafete provisional), `already_scanned` o `rejected` para
 el sonido y la vibración del celular.
+
+Sincronización sin señal (`POST /sync/batch`): `{ sentAt, events: [{ id, type, sequence,
+occurredAt, tripId, data }] }` con tipos `checklist`, `start`, `stop_arrived`, `scan`,
+`incident`, `panic`, `gate` y `finish` (`data` lleva lo mismo que el endpoint directo). Se
+procesa en el orden del celular (`sequence`; sin él, la hora), cada evento en su propia
+transacción. La hora se corrige con el desfase del reloj del celular (hora del servidor al
+recibir menos `sentAt`; se ignora si es menor a 2 s) y nunca queda en el futuro. Cada evento
+responde `applied`, `duplicate` (ya se había recibido; trae el resultado original),
+`rejected` (con el motivo; no reenviar) o `retry` (por ejemplo, el inicio del viaje aún no
+llega; reenviar después). Paradas, escaneos, QR de puerta e incidentes que llegan después de
+terminar el viaje se aceptan si ocurrieron antes de terminarlo.
 
 Credencial QR del pasajero: `SL1.<datos en base64url>.<firma Ed25519>`; los datos llevan
 credencial, pasajero, empresa y un valor aleatorio que cambia al reemitirla.

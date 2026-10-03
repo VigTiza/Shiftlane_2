@@ -15,6 +15,7 @@ const AUDIT_EXEMPT = [
   // Historial inmutable del viaje: trip_events es su propia bitácora.
   'boardings',
   'checklist_results',
+  'device_sync_events',
   'trip_events',
   'trip_photos',
 
