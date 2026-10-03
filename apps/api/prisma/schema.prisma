@@ -276,18 +276,21 @@ model ClientOrg {
   updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  createdByTenant     Tenant?                  @relation("ClientOrgCreatedBy", fields: [createdByTenantId], references: [id], onDelete: Restrict)
-  plants              Plant[]
-  users               User[]
-  permissionOverrides UserPermissionOverride[]
-  userRoles           UserRole[]
-  sessions            Session[]
-  serviceAgreements   ServiceAgreement[]
-  passengers          Passenger[]
-  gates               PlantGate[]
-  contacts            ClientContact[]
-  contracts           Contract[]
-  invitations         PlantInvitation[]
+  createdByTenant      Tenant?                  @relation("ClientOrgCreatedBy", fields: [createdByTenantId], references: [id], onDelete: Restrict)
+  plants               Plant[]
+  users                User[]
+  permissionOverrides  UserPermissionOverride[]
+  userRoles            UserRole[]
+  sessions             Session[]
+  serviceAgreements    ServiceAgreement[]
+  passengers           Passenger[]
+  gates                PlantGate[]
+  contacts             ClientContact[]
+  contracts            Contract[]
+  invitations          PlantInvitation[]
+  passengerCredentials PassengerCredential[]
+  provisionalBadges    ProvisionalBadge[]
+  passengerImports     PassengerImport[]
 
   @@index([createdByTenantId])
   @@map("client_orgs")
@@ -314,6 +317,8 @@ model Plant {
   contacts          ClientContact[]
   contracts         Contract[]
   invitations       PlantInvitation[]
+  provisionalBadges ProvisionalBadge[]
+  passengerImports  PassengerImport[]
 
   @@unique([id, clientOrgId])
   @@index([clientOrgId])
@@ -486,14 +491,18 @@ model Passenger {
   employeeNumber String          @map("employee_number")
   fullName       String          @map("full_name")
   status         PassengerStatus @default(active)
+  shiftName      String?         @map("shift_name")
+  phone          String?
   activatedAt    DateTime?       @map("activated_at") @db.Timestamptz(3)
   createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt      DateTime?       @map("deleted_at") @db.Timestamptz(3)
 
-  clientOrg ClientOrg @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
-  plant     Plant     @relation(fields: [plantId, clientOrgId], references: [id, clientOrgId], onDelete: Restrict)
-  sessions  Session[]
+  clientOrg      ClientOrg             @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
+  plant          Plant                 @relation(fields: [plantId, clientOrgId], references: [id, clientOrgId], onDelete: Restrict)
+  sessions       Session[]
+  credentials    PassengerCredential[]
+  resolvedBadges ProvisionalBadge[]
 
   @@unique([clientOrgId, employeeNumber])
   @@index([plantId])
@@ -825,4 +834,112 @@ model PlantInvitation {
   @@index([tenantId])
   @@index([plantId])
   @@map("plant_invitations")
+}
+
+// ---------------------------------------------------------------------------
+// Credenciales de pasajeros, gafetes provisionales y cargas de Excel
+// ---------------------------------------------------------------------------
+
+enum CredentialKind {
+  /// QR firmado por Shiftlane (se muestra en la app del pasajero).
+  shiftlane_qr
+  /// Gafete existente de la planta con código de barras.
+  badge_barcode
+  /// Gafete existente de la planta con QR propio.
+  badge_qr
+}
+
+model PassengerCredential {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientOrgId String         @map("client_org_id") @db.Uuid
+  passengerId String         @map("passenger_id") @db.Uuid
+  kind        CredentialKind
+  /// Código del gafete, o identificador aleatorio de la credencial de Shiftlane.
+  value       String
+  issuedAt    DateTime       @default(now()) @map("issued_at") @db.Timestamptz(3)
+  revokedAt   DateTime?      @map("revoked_at") @db.Timestamptz(3)
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  clientOrg ClientOrg @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
+  passenger Passenger @relation(fields: [passengerId], references: [id], onDelete: Cascade)
+
+  @@unique([clientOrgId, kind, value])
+  @@index([passengerId])
+  @@map("passenger_credentials")
+}
+
+enum BadgeKind {
+  barcode
+  qr
+}
+
+enum ProvisionalBadgeStatus {
+  pending
+  resolved
+  dismissed
+}
+
+/// Gafete que el chofer escaneó y no está en la lista de la planta. No detiene el viaje;
+/// RH lo resuelve después asignándolo a un empleado o descartándolo.
+model ProvisionalBadge {
+  id                  String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientOrgId         String                 @map("client_org_id") @db.Uuid
+  plantId             String                 @map("plant_id") @db.Uuid
+  /// Transportista cuyo chofer lo escaneó por primera vez.
+  tenantId            String?                @map("tenant_id") @db.Uuid
+  value               String
+  kind                BadgeKind
+  status              ProvisionalBadgeStatus @default(pending)
+  seenCount           Int                    @default(1) @map("seen_count")
+  firstSeenAt         DateTime               @default(now()) @map("first_seen_at") @db.Timestamptz(3)
+  lastSeenAt          DateTime               @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  resolvedPassengerId String?                @map("resolved_passenger_id") @db.Uuid
+  resolvedByUserId    String?                @map("resolved_by_user_id") @db.Uuid
+  resolvedAt          DateTime?              @map("resolved_at") @db.Timestamptz(3)
+  createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  clientOrg         ClientOrg  @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
+  plant             Plant      @relation(fields: [plantId, clientOrgId], references: [id, clientOrgId], onDelete: Restrict)
+  resolvedPassenger Passenger? @relation(fields: [resolvedPassengerId], references: [id], onDelete: SetNull)
+
+  @@unique([clientOrgId, value])
+  @@index([plantId, status])
+  @@map("provisional_badges")
+}
+
+enum PassengerImportMode {
+  /// Solo las filas del archivo: altas, cambios y bajas marcadas.
+  changes
+  /// El archivo es la lista completa: quien no aparece se da de baja.
+  full
+}
+
+enum PassengerImportStatus {
+  previewed
+  applied
+  discarded
+}
+
+/// Carga de Excel de empleados: primero vista previa de diferencias, luego se aplica.
+model PassengerImport {
+  id               String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientOrgId      String                @map("client_org_id") @db.Uuid
+  plantId          String                @map("plant_id") @db.Uuid
+  uploadedByUserId String?               @map("uploaded_by_user_id") @db.Uuid
+  fileName         String                @map("file_name")
+  mode             PassengerImportMode
+  status           PassengerImportStatus @default(previewed)
+  /// Filas validadas del archivo; se borran al aplicar para no guardar datos de más.
+  rows             Json?
+  summary          Json
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  appliedAt        DateTime?             @map("applied_at") @db.Timestamptz(3)
+
+  clientOrg ClientOrg @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
+  plant     Plant     @relation(fields: [plantId, clientOrgId], references: [id, clientOrgId], onDelete: Restrict)
+
+  @@index([clientOrgId, createdAt])
+  @@map("passenger_imports")
 }

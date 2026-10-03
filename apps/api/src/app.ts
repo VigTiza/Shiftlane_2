@@ -17,6 +17,7 @@ import {
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 
 import type { Env } from './config/env.ts';
+import { createCredentialSigner } from './lib/credential-signer.ts';
 import { createCipher } from './lib/crypto.ts';
 import { createDatabase } from './lib/db.ts';
 import type { Database } from './lib/db.ts';
@@ -39,6 +40,7 @@ import { driverRoutes } from './modules/drivers/routes.ts';
 import { healthRoutes } from './modules/health/routes.ts';
 import { invitationRoutes } from './modules/invitations/routes.ts';
 import { leadRoutes } from './modules/leads/routes.ts';
+import { passengerRoutes } from './modules/passengers/routes.ts';
 import { userRoutes } from './modules/users/routes.ts';
 import { vehicleRoutes } from './modules/vehicles/routes.ts';
 import { authPlugin } from './plugins/auth.ts';
@@ -113,6 +115,7 @@ export async function buildApp({ env, db, mailer, storage }: BuildAppOptions) {
   const authDeps = { db: database.system, sessions, tokens };
   app.decorate('tokens', tokens);
   app.decorate('cipher', cipher);
+  app.decorate('credentialSigner', createCredentialSigner(env.CREDENTIAL_SIGNING_KEY));
   app.decorate('mailer', mail);
   app.decorate('storage', storage ?? createStorage(env));
   app.decorate('authServices', {
@@ -166,6 +169,7 @@ export async function buildApp({ env, db, mailer, storage }: BuildAppOptions) {
   await app.register(contractRoutes);
   await app.register(leadRoutes);
   await app.register(invitationRoutes);
+  await app.register(passengerRoutes);
 
   return app;
 }

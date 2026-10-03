@@ -6,6 +6,7 @@ const DATABASE_URL = 'postgresql://usuario:clave@localhost:5432/shiftlane';
 const SECRETS = {
   JWT_SECRET: 'x'.repeat(32),
   ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+  CREDENTIAL_SIGNING_KEY: 'k'.repeat(64),
 };
 
 describe('loadEnv', () => {

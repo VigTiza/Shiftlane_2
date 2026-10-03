@@ -1,9 +1,9 @@
 # AVANCES — Shiftlane
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
-- Fase actual: F02 — Catálogos
-- Último prompt completado: F02-P02
-- Siguiente prompt: F02-P03 Pasajeros y credenciales
+- Fase actual: F03 — Rutas y paradas
+- Último prompt completado: F02-P03 (fase F02 terminada)
+- Siguiente prompt: F03-P01 Modelo de rutas con PostGIS
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -73,8 +73,30 @@
   especificidad; per_vehicle = precio por viaje según capacidad; viaje no realizado = no se
   cobra y su penalización queda a favor del cliente). Invitaciones de planta con fusión de
   empresas duplicadas (ver ADR 0003). Autorización en onRequest (403 antes de validar).
+- 2026-10-03 Credencial QR del pasajero firmada con Ed25519 (CREDENTIAL_SIGNING_KEY); la app
+  del chofer verificará sin señal con /credentials/public-key. Carga de empleados en dos
+  pasos (vista previa guardada y aplicación recalculada, todo o nada); las filas se borran al
+  aplicar o descartar. passenger_imports no se audita (datos personales).
 
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F02-P03 Pasajeros y credenciales
+- Hecho: migración passengers (turno y teléfono en passengers; passenger_credentials,
+  provisional_badges y passenger_imports) con RLS y auditoría. Firmado Ed25519 de
+  credenciales. Módulo passengers: CRUD para RH, consulta para transportistas con acuerdo,
+  credencial QR (emitir, reemitir, ver en la app del pasajero), gafetes existentes de la
+  planta, verificación por el chofer (QR firmado o gafete), gafetes provisionales (registrar,
+  resolver, descartar) y carga de Excel con vista previa de diferencias (altas, cambios,
+  bajas, reactivaciones; modos solo cambios y lista completa).
+- Archivos principales: apps/api/src/modules/passengers/*, src/lib/credential-signer.ts,
+  prisma/migrations/*_passengers.
+- Pruebas agregadas / resultado: 15 de pasajeros (aislamiento, duplicados, permisos, firma,
+  reemisión, alteración, verificación sin señal con llave pública, bajas, app del pasajero,
+  gafetes, provisionales, Excel con errores, carga mixta, lista completa, cambios entre
+  vista previa y aplicación). 186 pruebas de la API en verde.
+- Problemas encontrados y cómo se resolvieron: ninguno relevante.
+- Pendiente para después: contexto de base de datos propio del pasajero (F10); la app del
+  chofer descargará la lista y la llave pública para validar sin señal (F07-P06).
+
 ### 2026-10-03 — F02-P02 Clientes, plantas, contratos y tarifas
 - Hecho: motor de tarifas y penalizaciones (packages/shared/src/contract-rates.ts).
   Migración crm (plant_gates con QR fijo, client_contacts, contracts, rates, penalties,

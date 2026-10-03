@@ -1,4 +1,5 @@
 import type { Env } from '../config/env.ts';
+import type { CredentialSigner } from '../lib/credential-signer.ts';
 import type { Cipher } from '../lib/crypto.ts';
 import type { Database } from '../lib/db.ts';
 import type { Mailer } from '../lib/mailer.ts';
@@ -14,6 +15,7 @@ declare module 'fastify' {
     db: Database;
     tokens: TokenService;
     cipher: Cipher;
+    credentialSigner: CredentialSigner;
     mailer: Mailer;
     storage: ObjectStorage;
     authServices: {

@@ -3,6 +3,7 @@ import { inject } from 'vitest';
 import { buildApp } from '../../src/app.ts';
 import type { App } from '../../src/app.ts';
 import { loadEnv } from '../../src/config/env.ts';
+import { generateCredentialKey } from '../../src/lib/credential-signer.ts';
 import { createMemoryMailer } from '../../src/lib/mailer.ts';
 import type { Mailer } from '../../src/lib/mailer.ts';
 import { createMemoryStorage } from '../../src/lib/storage.ts';
@@ -11,6 +12,7 @@ import { createMemoryStorage } from '../../src/lib/storage.ts';
 export const TEST_SECRETS = {
   JWT_SECRET: 'secreto-de-pruebas-que-no-se-usa-en-produccion-123',
   ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
+  CREDENTIAL_SIGNING_KEY: generateCredentialKey(),
 };
 
 export interface TestAppOptions {

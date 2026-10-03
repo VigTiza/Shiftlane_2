@@ -168,5 +168,23 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 | POST | /invitations/accept | — | Aceptar creando la cuenta (la empresa pasa a administrarse sola) |
 | POST | /invitations/accept-existing | `users.manage` (planta) | Aceptar con una cuenta de planta existente (fusiona los datos capturados) |
 
+| GET/POST | /passengers | `plant.employees` (o `passengers.read` para ver) | Empleados de la planta |
+| GET/PATCH | /passengers/:id | `plant.employees` (o `passengers.read` para ver) | Detalle con credenciales, edición y baja |
+| POST | /passengers/:id/credential | `plant.employees` | Emite credencial QR firmada (la anterior deja de servir) |
+| POST | /passengers/:id/badges | `plant.employees` | Registra el gafete existente (código de barras o QR) |
+| DELETE | /passenger-credentials/:id | `plant.employees` | Da de baja una credencial |
+| GET | /passenger-imports/template | `plant.employees` | Plantilla de Excel de empleados |
+| GET/POST | /passenger-imports?plantId=&mode=changes\|full | `plant.employees` | Sube el Excel y devuelve la vista previa de diferencias |
+| POST | /passenger-imports/:id/apply, /discard | `plant.employees` | Aplica (todo o nada, recalculando) o descarta |
+| GET | /me/credential | pasajero | Credencial QR para abordar |
+| GET | /credentials/public-key | — | Llave pública Ed25519 para verificar credenciales sin señal |
+| POST | /credentials/verify | chofer | Identifica al pasajero por QR firmado o gafete |
+| POST | /provisional-badges | chofer | Registra un gafete desconocido sin detener el viaje |
+| GET | /provisional-badges | `plant.employees` o `passengers.read` | Gafetes provisionales |
+| POST | /provisional-badges/:id/resolve, /dismiss | `plant.employees` | Asignar a un empleado o descartar |
+
+Credencial QR del pasajero: `SL1.<datos en base64url>.<firma Ed25519>`; los datos llevan
+credencial, pasajero, empresa y un valor aleatorio que cambia al reemitirla.
+
 Las cargas de Excel validan cada fila y devuelven `{ totalRows, created, updated, errors: [{ row, column, message }], applied }`.
 Si hay un solo error no se guarda nada.

@@ -54,6 +54,14 @@ export function tenantIdOf(request: FastifyRequest): string {
   return tenantId;
 }
 
+/** Empresa cliente de la sesión. Para rutas de la planta (los permisos ya lo garantizan). */
+export function clientOrgIdOf(request: FastifyRequest): string {
+  const claims = authOf(request);
+  const clientOrgId = claims.kind === 'driver' ? null : claims.clientOrgId;
+  if (!clientOrgId) throw new ForbiddenError();
+  return clientOrgId;
+}
+
 /** Contexto de base de datos de la petición, con los datos para la bitácora. */
 export function dbContextOf(request: FastifyRequest): DbContext {
   return { ...contextFromClaims(authOf(request)), requestId: request.id, ip: request.ip };

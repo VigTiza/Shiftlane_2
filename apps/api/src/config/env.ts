@@ -58,6 +58,8 @@ const envSchema = z
     S3_ACCESS_KEY_ID: z.string().optional(),
     S3_SECRET_ACCESS_KEY: z.string().optional(),
     S3_FORCE_PATH_STYLE: booleanFromEnv.default(false),
+    /** Llave privada Ed25519 (PKCS8 DER en base64) para firmar las credenciales QR de pasajeros. */
+    CREDENTIAL_SIGNING_KEY: z.string().min(40),
     /** Zona horaria por omisión para fechas de negocio (vencimientos, días de servicio). */
     DEFAULT_TIME_ZONE: z.string().default('America/Ciudad_Juarez'),
   })

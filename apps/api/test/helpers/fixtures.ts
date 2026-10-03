@@ -35,6 +35,23 @@ export function fixtures(db: DbClient) {
       return user;
     },
 
+    async plantUser(input: { clientOrgId: string; password: string; roles?: string[] }) {
+      const user = await db.user.create({
+        data: {
+          kind: 'plant',
+          clientOrgId: input.clientOrgId,
+          email: `planta-${unique()}@example.com`,
+          fullName: 'Usuario de Planta',
+          passwordHash: await hashSecret(input.password),
+        },
+      });
+      for (const key of input.roles ?? ['plant_hr']) {
+        const role = await db.role.findUniqueOrThrow({ where: { key } });
+        await db.userRole.create({ data: { userId: user.id, roleId: role.id } });
+      }
+      return user;
+    },
+
     async clientOrgWithPlant(input: { tenantId: string; activationCode?: string }) {
       const org = await db.clientOrg.create({
         data: {

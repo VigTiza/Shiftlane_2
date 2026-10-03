@@ -8,7 +8,13 @@ import { fixtures } from '../helpers/fixtures.ts';
 const PASSWORD = 'Transporte2026';
 
 /** Tablas que no se auditan a propósito. Toda tabla nueva debe auditarse o agregarse aquí. */
-const AUDIT_EXEMPT = ['audit_log', 'password_reset_tokens', 'roles', 'sessions'];
+const AUDIT_EXEMPT = [
+  'audit_log',
+  'passenger_imports',
+  'password_reset_tokens',
+  'roles',
+  'sessions',
+];
 
 let app: App;
 let fx: ReturnType<typeof fixtures>;
