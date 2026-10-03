@@ -2,8 +2,8 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F05 — Operación de viajes y tiempo real
-- Último prompt completado: F05-P02 Sincronización sin señal (idempotente)
-- Siguiente prompt: F05-P03 Ingesta GPS y posiciones
+- Último prompt completado: F05-P03 Ingesta GPS y posiciones
+- Siguiente prompt: F05-P04 Tiempo real con Socket.IO
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -12,7 +12,8 @@
   - PENDIENTE DE REINICIO: WSL y Docker Desktop instalados, se activan al reiniciar. Tras
     reiniciar: abrir Docker Desktop, `pnpm services:up` (verificar que minio-setup no rompa
     `--wait`) y correr las pruebas con Testcontainers / contra el compose, incluida la de S3
-    (S3_TEST_ENDPOINT=http://localhost:9000).
+    (S3_TEST_ENDPOINT=http://localhost:9000) y la de Redis (REDIS_TEST_URL); poner
+    REDIS_URL=redis://localhost:6379 en apps/api/.env.
   - GitHub: origin = https://github.com/VigTiza/Shiftlane_2 (público), con acceso por el
     administrador de credenciales de Git. El CI pasó completo (incluye Testcontainers y
     Flutter en GitHub). Revisar el resultado tras cada push.
@@ -132,7 +133,32 @@
   por transacción para que los lotes parciales apliquen lo válido. El desfase del reloj se
   calcula por lote y se guarda en devices (sin auditar ese cambio).
 
+- 2026-10-03 Historial GPS en el esquema telemetry (fuera de Prisma) con particiones diarias
+  UTC creadas por app.ensure_trip_positions_partition (SECURITY DEFINER; las particiones
+  tienen RLS y no se pueden leer directo). Posición en vivo detrás de LiveStore (Redis o
+  memoria) envuelta para que sus fallas nunca detengan la ingesta. Las tareas diarias pasan
+  a un planificador genérico (src/jobs/scheduler.ts).
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F05-P03 Ingesta GPS y posiciones
+- Hecho: migración telemetry (trip_positions particionada por día, RLS con evidencia para la
+  planta, sin UPDATE/DELETE, función de particiones). POST /driver/positions con corrección
+  de reloj, solo durante el viaje, duplicados, geocercas de llegada, hora estimada y posición
+  en vivo; recorrido, posición en vivo por viaje y mapa de la empresa. ETA puro en shared
+  (eta.ts). LiveStore Redis (ioredis) / memoria. Tarea diaria de particiones. Al terminar el
+  viaje se borra la posición en vivo. CI con un contenedor de Redis.
+- Archivos principales: apps/api/src/modules/trips/positions-service.ts,
+  src/lib/{live-store,clock}.ts, src/jobs/{scheduler,position-partitions}.ts,
+  packages/shared/src/eta.ts, prisma/migrations/*_telemetry, .github/workflows/ci.yml.
+- Pruebas agregadas / resultado: 5 de ETA en shared, 4 del caché en vivo (más 3 contra Redis
+  real en CI) y 8 de integración (recorrido, geocerca, ETA y reenvío; solo durante el viaje;
+  reloj; particiones automáticas; borrado al terminar; 5 choferes × 400 puntos a la vez;
+  aislamiento; particiones sin acceso directo). 311 pruebas de la API en verde.
+- Problemas encontrados y cómo se resolvieron: Prisma no maneja tablas particionadas; se
+  dejaron en un esquema propio para que no aparezcan en las migraciones generadas.
+- Pendiente para después: probar Redis en local tras el reinicio; eventos en tiempo real
+  (F05-P04); alertas de retraso con la ETA (F06-P01).
+
 ### 2026-10-03 — F05-P02 Sincronización sin señal
 - Hecho: migración sync (device_sync_events inmutable con RLS; last_sync_at y clock_offset_ms
   en devices, fuera de la auditoría). POST /sync/batch: sobre por evento validado uno a uno,

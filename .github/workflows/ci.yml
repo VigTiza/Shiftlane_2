@@ -15,6 +15,17 @@ jobs:
   node:
     name: Lint, tipos y pruebas (Node)
     runs-on: ubuntu-latest
+    services:
+      # Posiciones en vivo: las pruebas de Redis usan este contenedor (REDIS_TEST_URL).
+      redis:
+        image: redis:8.10-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -35,6 +46,8 @@ jobs:
       - name: Pruebas
         # apps/api levanta PostgreSQL + PostGIS con Testcontainers (Docker del runner).
         run: pnpm -r --if-present run test
+        env:
+          REDIS_TEST_URL: redis://localhost:6379
 
   driver:
     name: App del chofer (Flutter)

@@ -4,6 +4,7 @@ import type { DbClient, DbTransaction } from '../../lib/db.ts';
 import { BadRequestError, ConflictError, NotFoundError } from '../../lib/errors.ts';
 import { fromDbDate } from '../../lib/http-schemas.ts';
 import { isUniqueViolation } from '../../lib/prisma-errors.ts';
+import type { LiveStore } from '../../lib/live-store.ts';
 import type { ObjectStorage } from '../../lib/storage.ts';
 import type { UploadedFile } from '../../lib/uploads.ts';
 import { storageKey } from '../../lib/uploads.ts';
@@ -121,6 +122,8 @@ export function createDriverTripsService(deps: {
   storage: ObjectStorage;
   system: DbClient;
   timeZone: string;
+  /** Al terminar el viaje se borra su posición en vivo. */
+  liveStore?: LiveStore;
 }) {
   const { passengers, routes, storage } = deps;
 
@@ -784,6 +787,7 @@ export function createDriverTripsService(deps: {
         boarded: await tx.boarding.count({ where: { tripId } }),
         gateVerified: trip.arrivedAt !== null,
       });
+      await deps.liveStore?.removeTrip(session.tenantId, tripId);
       return state(tx, tripId);
     },
   };

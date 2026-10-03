@@ -95,6 +95,8 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
   versiona). `app.db.app` respeta RLS y siempre se usa dentro de
   `withDbContext(db.app, { tenantId, clientOrgId, userId }, (tx) => ...)`. `app.db.system`
   se salta RLS: solo autenticación, tareas programadas y consola de plataforma.
+- Historial GPS: esquema telemetry (fuera de Prisma, solo SQL; particiones diarias con
+  app.ensure_trip_positions_partition). Posición en vivo: app.liveStore (Redis o memoria).
 - Tareas programadas en src/jobs: idempotentes, una transacción por transportista con
   `pg_try_advisory_xact_lock` (varias copias de la API no se pisan). Se activan con
   SCHEDULER_ENABLED (apagadas con NODE_ENV=test; en pruebas se llaman directo).

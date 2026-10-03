@@ -1,5 +1,6 @@
 import type { FastifyBaseLogger } from 'fastify';
 
+import { clockOffsetMs as offsetFor, correctedTime } from '../../lib/clock.ts';
 import type { Database, DbContext, DbTransaction } from '../../lib/db.ts';
 import { withDbContext } from '../../lib/db.ts';
 import { AppError } from '../../lib/errors.ts';
@@ -8,8 +9,6 @@ import type { DriverTripsService } from '../trips/driver-service.ts';
 import { SYNC_DATA, SYNC_EVENT_TYPES } from './schemas.ts';
 import type { SyncEvent, SyncEventType } from './schemas.ts';
 
-/** Diferencias menores se deben a la latencia de la red, no al reloj del celular. */
-const CLOCK_NOISE_MS = 2_000;
 /** Acciones que necesitan el viaje iniciado: si el inicio no ha llegado, se reintentan. */
 const NEEDS_START: readonly SyncEventType[] = ['stop_arrived', 'scan', 'gate', 'finish'];
 
@@ -230,8 +229,7 @@ export function createSyncService(deps: {
       body: { sentAt: Date; events: SyncEvent[] },
     ) {
       const receivedAt = new Date();
-      const rawOffset = receivedAt.getTime() - body.sentAt.getTime();
-      const clockOffsetMs = Math.abs(rawOffset) < CLOCK_NOISE_MS ? 0 : rawOffset;
+      const clockOffsetMs = offsetFor(body.sentAt, receivedAt);
 
       // Un evento repetido dentro del mismo lote se procesa una sola vez.
       const seen = new Map<string, number>();
@@ -246,9 +244,7 @@ export function createSyncService(deps: {
 
       const outcomes = new Map<string, Outcome>();
       for (const { event } of ordered) {
-        const corrected = new Date(event.occurredAt.getTime() + clockOffsetMs);
-        // Nada puede haber ocurrido después de que llegó al servidor.
-        const occurredAt = corrected > receivedAt ? receivedAt : corrected;
+        const occurredAt = correctedTime(event.occurredAt, clockOffsetMs, receivedAt);
         outcomes.set(event.id, await processEvent(context, session, event, occurredAt));
       }
 

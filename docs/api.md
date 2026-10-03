@@ -222,6 +222,10 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 | POST | /driver/trips/:id/incidents | chofer | Incidente con tipo, fotos y ubicación |
 | POST | /driver/panic | chofer | Pánico con o sin viaje |
 | POST | /sync/batch | chofer | Lote de eventos guardados sin señal (hasta 1000); resultado por evento |
+| POST | /driver/positions | chofer | Posiciones GPS en lote (hasta 2000); geocercas y hora estimada de llegada |
+| GET | /trips/:id/positions?from=&to=&limit= | igual que el detalle del viaje | Recorrido GPS guardado |
+| GET | /trips/:id/live | `monitoring.view`, `schedule.read` o `plant.dashboard` | Última posición del viaje en curso con horas estimadas |
+| GET | /live/positions | `monitoring.view` o `dispatch.operate` | Posiciones en vivo de los viajes en curso de la empresa |
 | GET | /trips/:id | `schedule.read`, `monitoring.view`, `plant.evidence` o `plant.dashboard` | Detalle con evidencia: historial, checklist, abordajes, incidentes, fotos |
 | GET | /trips/:id/photos/:photoId | igual que el detalle | Foto del viaje |
 | POST | /trips/:id/checklist-exception | `dispatch.operate` | Autoriza salir con el checklist sin aprobar |
@@ -292,6 +296,17 @@ responde `applied`, `duplicate` (ya se había recibido; trae el resultado origin
 `rejected` (con el motivo; no reenviar) o `retry` (por ejemplo, el inicio del viaje aún no
 llega; reenviar después). Paradas, escaneos, QR de puerta e incidentes que llegan después de
 terminar el viaje se aceptan si ocurrieron antes de terminarlo.
+
+Posiciones GPS: solo se guardan las tomadas durante el viaje (entre el inicio y el fin; las
+de antes, después o de viajes sin iniciar se rechazan como `outside_trip`). El historial vive
+en `telemetry.trip_positions`, particionada por día (UTC) y fuera de Prisma; la partición se
+crea sola al recibir datos y la tarea diaria crea los próximos días. Un punto por viaje e
+instante (los reenvíos cuentan como `duplicates`). La primera posición dentro del radio de
+una parada registra la llegada (`stop_arrived` con `auto: true`). La hora estimada suma la
+distancia directa × 1.3 a las paradas que faltan y a la planta (entrada) con la velocidad de
+la ruta (distancia ÷ tiempo de la versión, o `ROUTING_AVERAGE_SPEED_KMH`) y 1 minuto por
+parada; `delayMinutes` compara contra la llegada programada. La posición en vivo está en
+Redis (`REDIS_URL`; sin él, memoria) y se borra al terminar el viaje.
 
 Credencial QR del pasajero: `SL1.<datos en base64url>.<firma Ed25519>`; los datos llevan
 credencial, pasajero, empresa y un valor aleatorio que cambia al reemitirla.

@@ -2,6 +2,7 @@ import type { Env } from '../config/env.ts';
 import type { CredentialSigner } from '../lib/credential-signer.ts';
 import type { Cipher } from '../lib/crypto.ts';
 import type { Database } from '../lib/db.ts';
+import type { LiveStore } from '../lib/live-store.ts';
 import type { Mailer } from '../lib/mailer.ts';
 import type { RoutingProvider } from '../lib/routing.ts';
 import type { ObjectStorage } from '../lib/storage.ts';
@@ -22,6 +23,7 @@ declare module 'fastify' {
     storage: ObjectStorage;
     routingProvider: RoutingProvider;
     schedule: ScheduleService;
+    liveStore: LiveStore;
     authServices: {
       auth: AuthService;
       drivers: DriverAuthService;

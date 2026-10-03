@@ -19,8 +19,16 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { Env } from './config/env.ts';
 import { createCredentialSigner } from './lib/credential-signer.ts';
 import { createCipher } from './lib/crypto.ts';
-import { createTripHorizonJob } from './jobs/trip-horizon.ts';
+import { ensureUpcomingPartitions } from './jobs/position-partitions.ts';
+import { createDailyScheduler } from './jobs/scheduler.ts';
+import { ensureTripHorizon } from './jobs/trip-horizon.ts';
 import { createDatabase } from './lib/db.ts';
+import {
+  createMemoryLiveStore,
+  createRedisLiveStore,
+  createResilientLiveStore,
+} from './lib/live-store.ts';
+import type { LiveStore } from './lib/live-store.ts';
 import type { Database } from './lib/db.ts';
 import { AppError } from './lib/errors.ts';
 import { createLogMailer, createSmtpMailer } from './lib/mailer.ts';
@@ -70,6 +78,8 @@ export interface BuildAppOptions {
   storage?: ObjectStorage;
   /** Servicio de rutas por calles; por omisión según ROUTING_PROVIDER. */
   routing?: RoutingProvider;
+  /** Posiciones en vivo; por omisión Redis si hay REDIS_URL, si no memoria. */
+  liveStore?: LiveStore;
 }
 
 function createStorage(env: Env): ObjectStorage {
@@ -94,7 +104,7 @@ function loggerOptions(env: Env): FastifyServerOptions['logger'] {
   };
 }
 
-export async function buildApp({ env, db, mailer, storage, routing }: BuildAppOptions) {
+export async function buildApp({ env, db, mailer, storage, routing, liveStore }: BuildAppOptions) {
   const app = Fastify({
     logger: loggerOptions(env),
     trustProxy: env.TRUST_PROXY,
@@ -149,23 +159,46 @@ export async function buildApp({ env, db, mailer, storage, routing }: BuildAppOp
         app.log.warn({ err: error }, 'Servicio de rutas no disponible; se usa línea recta'),
     }),
   );
+  const live =
+    liveStore ??
+    (env.REDIS_URL
+      ? createRedisLiveStore(env.REDIS_URL, env.LIVE_POSITION_TTL_SECONDS)
+      : createMemoryLiveStore(env.LIVE_POSITION_TTL_SECONDS));
+  app.decorate('liveStore', createResilientLiveStore(live, app.log));
+  app.addHook('onClose', async () => live.close());
   app.decorate(
     'schedule',
     createScheduleService({ horizonDays: env.TRIP_HORIZON_DAYS, timeZone: env.DEFAULT_TIME_ZONE }),
   );
   if (env.SCHEDULER_ENABLED ?? env.NODE_ENV !== 'test') {
-    const tripHorizon = createTripHorizonJob({
-      db: database.system,
+    const scheduler = createDailyScheduler({
       log: app.log,
-      horizonDays: env.TRIP_HORIZON_DAYS,
       timeZone: env.DEFAULT_TIME_ZONE,
       hour: env.DAILY_JOBS_HOUR,
+      tasks: [
+        {
+          name: 'position-partitions',
+          description: 'Particiones del historial GPS creadas por adelantado',
+          run: () => ensureUpcomingPartitions(database.system, env.POSITION_PARTITION_DAYS_AHEAD),
+        },
+        {
+          name: 'trip-horizon',
+          description: 'Viajes generados por adelantado',
+          run: async () => ({
+            ...(await ensureTripHorizon(database.system, {
+              horizonDays: env.TRIP_HORIZON_DAYS,
+              timeZone: env.DEFAULT_TIME_ZONE,
+              log: app.log,
+            })),
+          }),
+        },
+      ],
     });
     app.addHook('onReady', (done) => {
-      tripHorizon.start();
+      scheduler.start();
       done();
     });
-    app.addHook('onClose', async () => tripHorizon.stop());
+    app.addHook('onClose', async () => scheduler.stop());
   }
   app.decorate('authServices', {
     auth: createAuthService({ ...authDeps, cipher, mailer: mail, appUrl: env.APP_URL }),

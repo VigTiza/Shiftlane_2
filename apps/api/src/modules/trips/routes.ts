@@ -19,6 +19,7 @@ import { createRoutesService } from '../routes/service.ts';
 import { createDriverTripsService } from './driver-service.ts';
 import type { DriverSession } from './driver-service.ts';
 import { createTripPanelService } from './panel-service.ts';
+import { createPositionsService } from './positions-service.ts';
 import {
   actionBody,
   arriveStopBody,
@@ -29,16 +30,21 @@ import {
   driverTripsQuery,
   exceptionBody,
   gateBody,
+  historyQuery,
+  historyResponse,
   incidentBody,
   incidentResponse,
   incidentSummary,
   incidentsQuery,
+  livePosition,
   panicBody,
   panicResponse,
   panicSummary,
   panicsQuery,
   photoKindQuery,
   photoResponse,
+  positionsBody,
+  positionsResponse,
   resolveIncidentBody,
   saveTemplateBody,
   scanBody,
@@ -57,15 +63,23 @@ function sessionOf(request: FastifyRequest): DriverSession {
 }
 
 export const tripRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
+  const routes = createRoutesService({
+    routing: app.routingProvider,
+    averageSpeedKmh: app.config.ROUTING_AVERAGE_SPEED_KMH,
+  });
+  const positions = createPositionsService({
+    db: app.db,
+    routes,
+    liveStore: app.liveStore,
+    averageSpeedKmh: app.config.ROUTING_AVERAGE_SPEED_KMH,
+  });
   const driver = createDriverTripsService({
     passengers: createPassengersService({ signer: app.credentialSigner }),
-    routes: createRoutesService({
-      routing: app.routingProvider,
-      averageSpeedKmh: app.config.ROUTING_AVERAGE_SPEED_KMH,
-    }),
+    routes,
     storage: app.storage,
     system: app.db.system,
     timeZone: app.config.DEFAULT_TIME_ZONE,
+    liveStore: app.liveStore,
   });
   const panel = createTripPanelService({ schedule: app.schedule, storage: app.storage });
   const driverOnly = requireAuth(app, { kinds: ['driver'] });
@@ -285,7 +299,83 @@ export const tripRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
       ),
   );
 
+  app.post(
+    '/driver/positions',
+    {
+      onRequest: driverOnly,
+      bodyLimit: 5 * 1024 * 1024,
+      schema: {
+        tags: DRIVER_TAGS,
+        summary: 'Posiciones GPS en lote (en vivo o guardadas sin señal)',
+        description:
+          'Solo se guardan las posiciones tomadas durante el viaje (entre el inicio y el fin). Detecta la llegada a paradas por geocerca y devuelve la hora estimada de llegada a cada parada y al destino.',
+        body: positionsBody,
+        response: { 200: positionsResponse },
+      },
+    },
+    (request) => {
+      const claims = authOf(request, 'driver');
+      return positions.ingest(
+        dbContextOf(request),
+        { tenantId: claims.tenantId, driverId: claims.sub, deviceId: claims.deviceId },
+        request.body,
+      );
+    },
+  );
+
   // --- Panel y portal de la planta -------------------------------------------------------
+
+  app.get(
+    '/trips/:id/positions',
+    {
+      onRequest: canSeeEvidence,
+      schema: {
+        tags: TAGS,
+        summary: 'Recorrido GPS guardado del viaje',
+        params: idParams,
+        querystring: historyQuery,
+        response: { 200: historyResponse },
+      },
+    },
+    (request) =>
+      withDbContext(app.db.app, dbContextOf(request), async (tx) => {
+        await app.schedule.tripSummary(tx, request.params.id);
+        return positions.history(tx, request.params.id, request.query);
+      }),
+  );
+
+  app.get(
+    '/trips/:id/live',
+    {
+      onRequest: requirePermission(app, 'monitoring.view', 'schedule.read', 'plant.dashboard'),
+      schema: {
+        tags: TAGS,
+        summary: 'Última posición del viaje en curso con sus horas estimadas de llegada',
+        params: idParams,
+        response: { 200: livePosition.nullable() },
+      },
+    },
+    async (request) => {
+      // Primero se comprueba que el viaje sea visible para quien pregunta.
+      await withDbContext(app.db.app, dbContextOf(request), (tx) =>
+        app.schedule.tripSummary(tx, request.params.id),
+      );
+      return app.liveStore.getTripPosition(request.params.id);
+    },
+  );
+
+  app.get(
+    '/live/positions',
+    {
+      onRequest: requirePermission(app, 'monitoring.view', 'dispatch.operate'),
+      schema: {
+        tags: TAGS,
+        summary: 'Posiciones en vivo de los viajes en curso de la empresa',
+        response: { 200: z.array(livePosition) },
+      },
+    },
+    (request) => app.liveStore.listTenantPositions(tenantIdOf(request)),
+  );
 
   app.get(
     '/trips/:id',

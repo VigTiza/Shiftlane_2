@@ -271,3 +271,87 @@ export const panicSummary = z.object({
   occurredAt: z.date(),
   acknowledgedAt: z.date().nullable(),
 });
+
+// --- Posiciones GPS --------------------------------------------------------------------
+
+export const MAX_POSITIONS = 2000;
+
+export const positionsBody = z.object({
+  /** Hora del celular al enviar: corrige el desfase de su reloj. */
+  sentAt: z.coerce.date(),
+  points: z
+    .array(
+      z.object({
+        tripId: z.uuid(),
+        recordedAt: z.coerce.date(),
+        lat: z.number().min(-90).max(90),
+        lng: z.number().min(-180).max(180),
+        speedKmh: z.number().min(0).max(300).optional(),
+        heading: z.number().min(0).max(360).optional(),
+        accuracyM: z.number().min(0).max(10_000).optional(),
+        battery: z.number().int().min(0).max(100).optional(),
+      }),
+    )
+    .min(1, 'El lote no trae posiciones.')
+    .max(MAX_POSITIONS, `Envía como máximo ${MAX_POSITIONS} posiciones por lote.`),
+});
+
+const etaSchema = z
+  .object({
+    stops: z.array(z.object({ stopId: z.uuid(), eta: z.string(), distanceMeters: z.number() })),
+    destination: z.object({ eta: z.string(), distanceMeters: z.number() }).nullable(),
+    /** Minutos de retraso (negativo: adelanto) contra la llegada programada. */
+    delayMinutes: z.number().int().nullable(),
+  })
+  .nullable();
+
+export const positionsResponse = z.object({
+  receivedAt: z.date(),
+  clockOffsetMs: z.number().int(),
+  accepted: z.number().int(),
+  duplicates: z.number().int(),
+  rejected: z.object({
+    /** El viaje no existe o no es del chofer. */
+    trip_not_found: z.number().int(),
+    /** Fuera del viaje: la ubicación solo se guarda entre el inicio y el fin. */
+    outside_trip: z.number().int(),
+  }),
+  trips: z.array(
+    z.object({
+      tripId: z.uuid(),
+      autoArrivals: z.array(z.object({ stopId: z.uuid(), stopName: z.string(), at: z.date() })),
+      eta: etaSchema,
+    }),
+  ),
+});
+
+export const historyQuery = z.object({
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  limit: z.coerce.number().int().min(1).max(20_000).default(5_000),
+});
+
+export const historyResponse = z.array(
+  z.object({
+    recordedAt: z.date(),
+    lat: z.number(),
+    lng: z.number(),
+    speedKmh: z.number().nullable(),
+    heading: z.number().nullable(),
+    accuracyM: z.number().nullable(),
+  }),
+);
+
+export const livePosition = z.object({
+  tripId: z.uuid(),
+  plantId: z.uuid(),
+  routeId: z.uuid().nullable(),
+  driverId: z.uuid(),
+  vehicleId: z.uuid().nullable(),
+  lat: z.number(),
+  lng: z.number(),
+  speedKmh: z.number().nullable(),
+  heading: z.number().nullable(),
+  recordedAt: z.string(),
+  eta: etaSchema,
+});

@@ -6,9 +6,6 @@ import { autoAssign } from '../modules/schedule/assignments.ts';
 import { generateTrips } from '../modules/schedule/generator.ts';
 import type { GenerationResult } from '../modules/schedule/generator.ts';
 
-const CHECK_EVERY_MS = 15 * 60_000;
-const STARTUP_DELAY_MS = 5_000;
-
 export interface TripHorizonRun extends GenerationResult {
   from: string;
   to: string;
@@ -86,70 +83,4 @@ export async function ensureTripHorizon(
     }
   }
   return run;
-}
-
-/**
- * Tarea diaria dentro de la API: corre al arrancar y después una vez al día a partir de la
- * hora configurada. Es idempotente, así que repetirla no duplica viajes.
- */
-export function createTripHorizonJob(options: {
-  db: DbClient;
-  log: FastifyBaseLogger;
-  horizonDays: number;
-  timeZone: string;
-  hour: number;
-}) {
-  let timer: NodeJS.Timeout | undefined;
-  let lastRunDate: string | null = null;
-  let running: Promise<void> | null = null;
-
-  function localHour() {
-    return Number(
-      new Intl.DateTimeFormat('en-US', {
-        timeZone: options.timeZone,
-        hour: '2-digit',
-        hourCycle: 'h23',
-      }).format(new Date()),
-    );
-  }
-
-  async function run() {
-    const date = todayIn(options.timeZone);
-    lastRunDate = date;
-    const started = Date.now();
-    const result = await ensureTripHorizon(options.db, options);
-    options.log.info(
-      { job: 'trip-horizon', ms: Date.now() - started, ...result },
-      'Viajes generados por adelantado',
-    );
-  }
-
-  function tick(force = false) {
-    if (running) return;
-    const due = force || (todayIn(options.timeZone) !== lastRunDate && localHour() >= options.hour);
-    if (!due) return;
-    running = run()
-      .catch((error: unknown) =>
-        options.log.error({ err: error, job: 'trip-horizon' }, 'Falló la tarea diaria'),
-      )
-      .finally(() => {
-        running = null;
-      });
-  }
-
-  return {
-    start() {
-      timer = setTimeout(() => {
-        tick(true);
-        timer = setInterval(() => tick(), CHECK_EVERY_MS);
-        timer.unref();
-      }, STARTUP_DELAY_MS);
-      timer.unref();
-    },
-    async stop() {
-      clearTimeout(timer);
-      clearInterval(timer);
-      await running;
-    },
-  };
 }

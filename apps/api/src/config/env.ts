@@ -76,6 +76,12 @@ const envSchema = z
     DAILY_JOBS_HOUR: z.coerce.number().int().min(0).max(23).default(2),
     /** Días de viajes que se mantienen generados por adelantado. */
     TRIP_HORIZON_DAYS: z.coerce.number().int().min(1).max(62).default(14),
+    /** Redis para posiciones en vivo; sin él se usa memoria (solo para desarrollo). */
+    REDIS_URL: z.url().optional(),
+    /** Segundos que una posición en vivo sigue vigente sin recibir otra. */
+    LIVE_POSITION_TTL_SECONDS: z.coerce.number().int().min(30).default(600),
+    /** Días por adelantado con partición del historial GPS ya creada. */
+    POSITION_PARTITION_DAYS_AHEAD: z.coerce.number().int().min(1).max(60).default(7),
   })
   .superRefine((env, ctx) => {
     if (env.ROUTING_PROVIDER === 'osrm' && !env.ROUTING_URL) {

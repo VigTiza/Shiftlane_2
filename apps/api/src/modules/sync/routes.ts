@@ -23,6 +23,7 @@ export const syncRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
       storage: app.storage,
       system: app.db.system,
       timeZone: app.config.DEFAULT_TIME_ZONE,
+      liveStore: app.liveStore,
     }),
   });
 
