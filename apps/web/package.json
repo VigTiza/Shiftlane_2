@@ -1,0 +1,18 @@
+{
+  "name": "@shiftlane/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Panel de la transportista, portal de la planta y consola de plataforma",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@shiftlane/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

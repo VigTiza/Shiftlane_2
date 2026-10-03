@@ -1,0 +1,18 @@
+{
+  "name": "@shiftlane/rider",
+  "version": "0.0.0",
+  "private": true,
+  "description": "App del pasajero (PWA)",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@shiftlane/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -1,17 +1,20 @@
 # AVANCES — Shiftlane
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
-- Fase actual: F00 — Preparación del workspace
-- Último prompt completado: F00-P02
-- Siguiente prompt: F00-P03 — requiere que el usuario instale Docker Desktop y Flutter
+- Fase actual: F01 — Núcleo del backend
+- Último prompt completado: F00-P03
+- Siguiente prompt: F01-P01 Esqueleto de la API
 - Trabajo a medias (si lo hay): ninguno
-- Pruebas: todas pasan (`pnpm test` = verificación de documentos de referencia)
-- Cómo levantar el entorno: `pnpm install` y `pnpm test` (Docker y servicios llegan en F00-P03)
+- Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
+- Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
+  apps/api/.env). Con Docker: `pnpm services:up` (requiere reiniciar la PC una vez).
 - Pendientes abiertos:
-  - El usuario debe instalar Docker Desktop y Flutter antes de F00-P03.
-  - F00-P03 necesita un repositorio remoto en GitHub para que corra el CI.
-  - En CI (Linux) el comando puede ser `python3`; ajustar los scripts docs:* en F00-P03.
-  - Confirmar con el usuario: la portada de los .docx dice «RUTASYNC» (¿nombre anterior?).
+  - PENDIENTE DE REINICIO: WSL y Docker Desktop instalados, se activan al reiniciar. Tras
+    reiniciar: abrir Docker Desktop, `pnpm services:up` y correr las pruebas con
+    Testcontainers / contra el compose.
+  - Push a GitHub: remoto origin = https://github.com/VigTiza/Shiftlane_2 (público), pero
+    falta iniciar sesión (`gh auth login` + `gh auth setup-git`). Los commits están locales
+    y el CI no ha corrido todavía.
 
 ## DECISIONES IMPORTANTES
 - 2026-10-02 Los .docx se convierten con pandoc 3.12 y un script propio
@@ -29,8 +32,42 @@
   Windows y el CI en Linux produzcan los mismos archivos.
 - 2026-10-02 Las reglas de sesión del usuario (3 a 5 prompts por sesión, detenerse ante
   acciones del usuario, reporte final) quedan en CLAUDE.md para que apliquen siempre.
+- 2026-10-03 El usuario confirmó que el nombre es Shiftlane (RUTASYNC era el anterior).
+- 2026-10-03 TypeScript 6.0 (no 7): typescript-eslint 8.71 solo soporta TypeScript <6.1.
+  Revisar al llegar soporte para TypeScript 7.
+- 2026-10-03 PostgreSQL 16 + PostGIS 3.6 nativo en Windows (puerto 5433) para correr
+  pruebas de integración mientras Docker espera el reinicio. Docker Compose usa el 5432
+  para que ambos convivan. En CI la base es un contenedor postgis/postgis:16-3.5.
+- 2026-10-03 Versiones compartidas con `catalog:` de pnpm; Prettier no toca Markdown ni
+  apps/driver (Dart usa `dart format`). Lint de TypeScript con información de tipos.
+- 2026-10-03 apps/driver se creó con `flutter create --empty` (org mx.shiftlane, paquete
+  shiftlane_driver, solo Android). El applicationId mx.shiftlane.shiftlane_driver puede
+  cambiarse antes de publicar en Google Play (F21).
+- 2026-10-03 El usuario autorizó, solo en esta sesión, avanzar todos los prompts posibles.
 
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F00-P03 Entorno local, calidad de código e integración continua
+- Hecho: infra/docker-compose.dev.yml (postgis/postgis:16-3.5, redis:8.10-alpine,
+  axllent/mailpit:v1.31, puertos solo en 127.0.0.1, chequeos de salud) e infra/.env.example.
+  tsconfig.base.json estricto, eslint.config.mjs (typescript-eslint con tipos + Prettier),
+  .prettierrc.json. Paquetes @shiftlane/api, web, rider, landing y shared con prueba
+  trivial; app Flutter mínima con análisis estricto y prueba de widget. Scripts en la raíz:
+  dev, services:up/down, test, lint, format, typecheck, db:migrate, db:seed.
+  CI en .github/workflows/ci.yml (job Node con PostGIS en contenedor y job Flutter).
+- Instalado en la PC: WSL, Docker Desktop 4.93, Flutter 3.47.6, GitHub CLI, PostgreSQL 16
+  + PostGIS 3.6 (nativo), actionlint. Remoto cambiado a VigTiza/Shiftlane_2 y la historia
+  local se reubicó sobre su commit inicial (LICENSE Apache 2.0).
+- Archivos principales: package.json, pnpm-workspace.yaml, tsconfig.base.json,
+  eslint.config.mjs, infra/docker-compose.dev.yml, .github/workflows/ci.yml, apps/*/,
+  packages/shared/.
+- Pruebas agregadas / resultado: 6 pruebas Vitest (incluye conexión a PostgreSQL con PostGIS
+  si hay DATABASE_URL) y 1 de Flutter; lint, tipos y actionlint sin problemas. El compose
+  se validó con `docker compose config` (sin levantarlo: falta el reinicio).
+- Problemas encontrados y cómo se resolvieron: TypeScript 7 incompatible con
+  typescript-eslint (se fijó 6.0); el tar de Git Bash no abre .zip (se usó el de Windows);
+  pnpm 12 agregó una excepción de antigüedad mínima para eslint 10.12.0.
+- Pendiente para después: levantar el compose y correr el CI real (reinicio y login de GitHub).
+
 ### 2026-10-02 — F00-P02 Documentos de referencia en Markdown
 - Hecho: la conversión de los .docx y la revisión de tablas y listas se hicieron antes de
   F00-P01 (ver esa entrada). En este prompt se agregó docs/referencia/resumen.md (65 líneas:

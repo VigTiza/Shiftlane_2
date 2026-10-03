@@ -62,16 +62,36 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
 - .github/workflows — CI/CD
 
 ## Comandos
-- `pnpm install` — instala las dependencias del workspace.
-- `pnpm test` — ejecuta todas las pruebas (por ahora, la verificación de documentos).
+- `pnpm install` — instala las dependencias del workspace; en apps/driver, `flutter pub get`.
+- `pnpm dev` — levanta PostgreSQL+PostGIS, Redis y Mailpit (Docker) y los `dev` de cada app.
+- `pnpm services:up` / `pnpm services:down` — solo los servicios de infra/docker-compose.dev.yml.
+- `pnpm test` — todas las pruebas: documentos, Vitest de cada paquete y `flutter test`.
+- `pnpm lint` — ESLint + Prettier (--check) + `dart format` y `flutter analyze` en apps/driver.
+- `pnpm format` — aplica Prettier y `dart format`.
+- `pnpm typecheck` — `tsc --noEmit` en cada paquete TypeScript.
+- `pnpm db:migrate` / `pnpm db:seed` — migraciones y datos de ejemplo (apps/api, desde F01-P02).
 - `pnpm docs:referencia` — regenera docs/referencia/*.md e indice-de-prompts.md a partir
   de los .docx de docs/referencia/originales/ (requiere pandoc).
 - `pnpm docs:verificar` — comprueba que los Markdown estén completos, el índice al día y
   el resumen dentro de 80 líneas.
-- Pendientes de F00-P03: dev (levantar entorno), lint, typecheck, db:migrate, db:seed.
+- Un solo paquete: `pnpm --filter @shiftlane/api test` (lo mismo con web, rider, shared, landing).
+- CI: .github/workflows/ci.yml (Node con PostgreSQL+PostGIS en contenedor, y Flutter).
+
+## Configuración compartida
+- tsconfig.base.json (estricto), eslint.config.mjs (typescript-eslint con tipos),
+  .prettierrc.json. Versiones comunes en `catalog:` de pnpm-workspace.yaml.
+- TypeScript 6.0: typescript-eslint aún no soporta TypeScript 7.
+- Las pruebas de apps/api leen apps/api/.env (no versionado); DATABASE_URL apunta a la base local.
 
 ## Entorno local
 - Windows 10; Node.js 24 LTS y pnpm 12. Los scripts de package.json deben funcionar en
   Windows y en Linux (CI).
+- Flutter 3.47.6 en C:\src\flutter (en el PATH del usuario; en una terminal vieja usar
+  C:\src\flutter\bin\flutter).
+- PostgreSQL 16 + PostGIS 3.6 nativo (servicio postgresql-x64-16, puerto 5433): rol y base
+  `shiftlane`; la contraseña está en apps/api/.env. La del superusuario postgres está en
+  %LOCALAPPDATA%\Shiftlane\pg-superuser.txt.
+- Docker Desktop instalado; necesita reiniciar la PC (WSL) antes del primer uso.
 - pandoc: %LOCALAPPDATA%\Pandoc\pandoc.exe (el script lo encuentra aunque no esté en PATH).
 - Blender 5.2: "C:\Program Files\Blender Foundation\Blender 5.2\blender.exe" (no está en PATH).
+- actionlint (winget) para validar workflows de GitHub Actions.

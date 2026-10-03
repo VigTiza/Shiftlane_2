@@ -1,0 +1,16 @@
+{
+  "name": "@shiftlane/landing",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Landing page de Shiftlane con animaciones 3D",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@shiftlane/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "catalog:"
+  }
+}

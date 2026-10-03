@@ -1,0 +1,18 @@
+{
+  "name": "@shiftlane/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Tipos, esquemas Zod, constantes y reglas de negocio compartidas",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

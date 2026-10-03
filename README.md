@@ -19,13 +19,17 @@ cobrar cada viaje que hacen para las plantas que las contratan.
 
 ## Empezar
 
-Requisitos: Node.js 24 LTS, pnpm, Python 3 y pandoc (solo para regenerar los documentos
-de referencia). Docker y Flutter se agregan en la fase F00-P03.
+Requisitos: Node.js 24 LTS, pnpm, Python 3, Docker, Flutter 3.47 y pandoc (solo para
+regenerar los documentos de referencia).
 
 ```sh
 pnpm install
+pnpm services:up   # PostgreSQL + PostGIS, Redis y Mailpit
 pnpm test
+pnpm lint
 ```
+
+Los comandos completos están en [CLAUDE.md](CLAUDE.md#comandos).
 
 ## Documentación
 

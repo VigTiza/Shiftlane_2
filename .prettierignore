@@ -1,0 +1,9 @@
+pnpm-lock.yaml
+dist/
+coverage/
+
+# Flutter tiene su propio formateador (dart format).
+apps/driver/
+
+# Markdown escrito a mano o generado por pandoc: no se reformatea.
+*.md
