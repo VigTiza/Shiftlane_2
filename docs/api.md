@@ -200,7 +200,11 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 | GET | /route-versions/:id/nearest-stop?lat=&lng=&maxMeters= | `routes.read` | Parada más cercana dentro del radio |
 | GET | /route-versions/:id/distance-to-path?lat=&lng=&thresholdMeters= | `routes.read` | Distancia al trazado y si es desvío |
 
-| POST | /schedule/generate | `schedule.write` | Genera los viajes regulares de un rango (máx. 62 días); idempotente |
+| POST | /schedule/generate | `schedule.write` | Genera los viajes regulares de un rango (máx. 62 días) y asigna los habituales; idempotente |
+| PUT | /trips/:id/assignment | `schedule.write` | Asigna unidad y chofer; 409 `ASSIGNMENT_CONFLICTS` si hay conflictos que bloquean (con `force: true` asigna de todos modos) |
+| POST | /schedule/auto-assign | `schedule.write` | Chofer y unidad habituales a los viajes sin asignar (no toca manuales ni copiados) |
+| POST | /schedule/copy-week | `schedule.write` | Copia la asignación de una semana (lunes) a otra; respeta manuales salvo `overwrite` |
+| GET | /schedule/conflicts?from=&to=&plantId=&routeId=&severity= | `schedule.read` | Conflictos con sugerencia de solución (máx. 31 días) |
 | GET | /trips?from=&to=&plantId=&routeId=&status=&kind= | `schedule.read` o `plant.dashboard` | Viajes de un rango (por omisión, esta semana); la planta ve los de sus transportistas |
 | GET/POST | /holidays | `schedule.read` / `schedule.write` o `settings.manage` | Días festivos del año, generales o por planta |
 | PATCH/DELETE | /holidays/:id | `schedule.write` o `settings.manage` | Cambiar nombre o si hay servicio; eliminar (ajusta los viajes) |
@@ -224,6 +228,16 @@ de verano). Regenerar crea lo que falta, actualiza lo programado y cancela lo qu
 (motivo con prefijo «[Automático]»); no toca viajes iniciados, terminados ni cancelados a
 mano, ni fechas pasadas. Una tarea diaria mantiene `TRIP_HORIZON_DAYS` (14) días generados y
 cada cambio de ruta, turno, festivo o cambio temporal ajusta los viajes en la misma operación.
+
+Asignación y conflictos: cada viaje guarda chofer, unidad y origen de la asignación
+(`habitual`, `manual` o `copied`). La ruta puede tener chofer y unidad habituales (si no tiene
+unidad, se usa la habitual del chofer). Conflictos que bloquean (`error`): chofer o unidad en
+dos viajes que se traslapan, unidad en mantenimiento, fuera de servicio o dada de baja,
+documentos vencidos a la fecha del viaje (permiso, seguro, tarjeta de circulación,
+verificación; examen médico, antidoping, capacitación), licencia ausente, vencida o de otro
+tipo que el que exige la unidad (`requiredLicenseType`), chofer inactivo. Avisos (`warning`):
+capacidad menor que los pasajeros asignados a la ruta y viaje sin asignar. Cada conflicto trae
+una sugerencia con opciones (choferes o unidades libres y en regla).
 
 Credencial QR del pasajero: `SL1.<datos en base64url>.<firma Ed25519>`; los datos llevan
 credencial, pasajero, empresa y un valor aleatorio que cambia al reemitirla.

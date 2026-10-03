@@ -178,8 +178,15 @@ export function createTemporaryChangesService(deps: {
         },
       },
       orderBy: { serviceDate: 'asc' },
-      select: { id: true, serviceDate: true },
+      select: {
+        id: true,
+        serviceDate: true,
+        driver: { select: { id: true, fullName: true } },
+      },
     });
+    const drivers = new Map(
+      trips.flatMap((trip) => (trip.driver ? [[trip.driver.id, trip.driver] as const] : [])),
+    );
 
     return {
       period,
@@ -188,13 +195,13 @@ export function createTemporaryChangesService(deps: {
       distanceKm: { from: baseline.distanceKm, to: metrics.distanceKm },
       durationMinutes: { from: baseline.durationMinutes, to: metrics.durationMinutes },
       passengers,
-      // Viajes ya programados en el periodo; el chofer se llena con la asignación (F04-P02).
+      // Viajes ya programados en el periodo y los choferes que tienen asignados.
       trips: trips.map((trip) => ({
         id: trip.id,
         date: fromDbDate(trip.serviceDate)!,
-        driverName: null as string | null,
+        driverName: trip.driver?.fullName ?? null,
       })),
-      drivers: [] as { id: string; fullName: string }[],
+      drivers: [...drivers.values()].sort((a, b) => a.fullName.localeCompare(b.fullName)),
     };
   }
 

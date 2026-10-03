@@ -1,13 +1,23 @@
 import { addDays, mexicanOfficialHolidays, todayIn } from '@shiftlane/shared';
 
 import type { DbTransaction } from '../../lib/db.ts';
-import { BadRequestError, ConflictError, NotFoundError } from '../../lib/errors.ts';
+import { AppError, BadRequestError, ConflictError, NotFoundError } from '../../lib/errors.ts';
 import { fromDbDate, toDbDate } from '../../lib/http-schemas.ts';
 import { isUniqueViolation } from '../../lib/prisma-errors.ts';
 import type { Holiday, Prisma } from '../../generated/prisma/client.ts';
 import { datesBetween } from '../routes/versioning.ts';
+import {
+  applyInSnapshot,
+  autoAssign,
+  conflictsFor,
+  copyWeek,
+  loadSnapshot,
+  saveAssignment,
+} from './assignments.ts';
+import { blocking } from './conflicts.ts';
+import type { ConflictSeverity } from './conflicts.ts';
 import { generateTrips } from './generator.ts';
-import { MAX_GENERATION_DAYS, MAX_LIST_DAYS } from './schemas.ts';
+import { MAX_CONFLICT_DAYS, MAX_GENERATION_DAYS, MAX_LIST_DAYS } from './schemas.ts';
 
 type TripStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 
@@ -46,8 +56,12 @@ export function createScheduleService(deps: { horizonDays: number; timeZone: str
 
   async function refreshRoutes(tx: DbTransaction, tenantId: string, routeIds: string[]) {
     if (routeIds.length === 0) return null;
+    const from = horizonStart();
     const to = await horizonEnd(tx, tenantId, routeIds);
-    return generateTrips(tx, { tenantId, from: horizonStart(), to, routeIds });
+    const result = await generateTrips(tx, { tenantId, from, to, routeIds });
+    // Chofer y unidad habituales para los viajes nuevos (o si cambiaron en la ruta).
+    await autoAssign(tx, tenantId, { from, to, routeIds });
+    return result;
   }
 
   /** Regenera un día ya programado (los días fuera del horizonte se generan a su tiempo). */
@@ -91,7 +105,163 @@ export function createScheduleService(deps: { horizonDays: number; timeZone: str
         );
       }
       const result = await generateTrips(tx, { tenantId, from, to });
-      return { from, to, ...result };
+      const assignment = await autoAssign(tx, tenantId, { from, to });
+      return { from, to, ...result, assigned: assignment.assigned };
+    },
+
+    // --- Asignación de unidad y chofer -----------------------------------------------
+
+    async assign(
+      tx: DbTransaction,
+      tenantId: string,
+      userId: string,
+      tripId: string,
+      input: {
+        driverId?: string | null | undefined;
+        vehicleId?: string | null | undefined;
+        force: boolean;
+      },
+    ) {
+      const current = await tx.trip.findFirst({ where: { id: tripId, tenantId } });
+      if (!current) throw new NotFoundError('No se encontró el viaje.');
+      if (current.status !== 'scheduled') {
+        throw new ConflictError(
+          current.status === 'cancelled'
+            ? 'El viaje está cancelado.'
+            : 'El viaje ya empezó o terminó; los cambios en curso se hacen desde el despacho.',
+        );
+      }
+      const driverId = input.driverId === undefined ? current.driverId : input.driverId;
+      const vehicleId = input.vehicleId === undefined ? current.vehicleId : input.vehicleId;
+      if (driverId && input.driverId !== undefined) {
+        const driver = await tx.driver.findFirst({ where: { id: driverId, deletedAt: null } });
+        if (!driver) throw new BadRequestError('No se encontró el chofer.');
+      }
+      if (vehicleId && input.vehicleId !== undefined) {
+        const vehicle = await tx.vehicle.findFirst({ where: { id: vehicleId, deletedAt: null } });
+        if (!vehicle) throw new BadRequestError('No se encontró la unidad.');
+      }
+
+      const date = fromDbDate(current.serviceDate)!;
+      const snapshot = await loadSnapshot(tx, tenantId, { from: date, to: date });
+      const trip = snapshot.trips.find((t) => t.id === tripId)!;
+      applyInSnapshot(snapshot, trip, driverId, vehicleId);
+      const conflicts = conflictsFor(trip, snapshot);
+      const errors = blocking(conflicts);
+      if (errors.length > 0 && !input.force) {
+        throw new AppError(
+          409,
+          'ASSIGNMENT_CONFLICTS',
+          'La asignación tiene conflictos. Corrígelos o confirma para asignar de todos modos.',
+          errors.map((c) => ({ path: c.type, message: c.message })),
+        );
+      }
+      await saveAssignment(tx, tripId, { driverId, vehicleId, source: 'manual', userId });
+      const listed = await this.listTrips(tx, { from: date, to: date, page: 1, pageSize: 500 });
+      return { trip: listed.items.find((t) => t.id === tripId)!, conflicts };
+    },
+
+    async autoAssign(
+      tx: DbTransaction,
+      tenantId: string,
+      range: {
+        from: string;
+        to: string;
+        plantId?: string | undefined;
+        routeId?: string | undefined;
+      },
+    ) {
+      if (datesBetween(range.from, range.to).length > MAX_GENERATION_DAYS) {
+        throw new BadRequestError(`Asigna como máximo ${MAX_GENERATION_DAYS} días a la vez.`);
+      }
+      return autoAssign(tx, tenantId, {
+        from: range.from,
+        to: range.to,
+        plantId: range.plantId,
+        routeIds: range.routeId ? [range.routeId] : undefined,
+      });
+    },
+
+    /** Copia la asignación de una semana a otra; primero genera los viajes de la semana destino. */
+    async copyWeek(
+      tx: DbTransaction,
+      tenantId: string,
+      userId: string,
+      input: {
+        sourceWeekStart: string;
+        targetWeekStart?: string | undefined;
+        plantId?: string | undefined;
+        routeId?: string | undefined;
+        overwrite: boolean;
+      },
+    ) {
+      const targetStart = input.targetWeekStart ?? addDays(input.sourceWeekStart, 7);
+      if (targetStart === input.sourceWeekStart) {
+        throw new BadRequestError('La semana destino debe ser distinta de la semana origen.');
+      }
+      const routeIds = input.routeId ? [input.routeId] : undefined;
+      const generated = await generateTrips(tx, {
+        tenantId,
+        from: targetStart,
+        to: addDays(targetStart, 6),
+        routeIds,
+      });
+      const result = await copyWeek(tx, tenantId, userId, {
+        sourceStart: input.sourceWeekStart,
+        targetStart,
+        plantId: input.plantId,
+        routeIds,
+        overwrite: input.overwrite,
+      });
+      return {
+        sourceWeekStart: input.sourceWeekStart,
+        targetWeekStart: targetStart,
+        generated: generated.created,
+        ...result,
+      };
+    },
+
+    async conflicts(
+      tx: DbTransaction,
+      tenantId: string,
+      query: {
+        from?: string | undefined;
+        to?: string | undefined;
+        plantId?: string | undefined;
+        routeId?: string | undefined;
+        severity?: ConflictSeverity | undefined;
+      },
+    ) {
+      const from = query.from ?? todayIn(deps.timeZone);
+      const to = query.to ?? addDays(from, 6);
+      if (datesBetween(from, to).length > MAX_CONFLICT_DAYS) {
+        throw new BadRequestError(`Revisa como máximo ${MAX_CONFLICT_DAYS} días a la vez.`);
+      }
+      const snapshot = await loadSnapshot(tx, tenantId, {
+        from,
+        to,
+        plantId: query.plantId,
+        routeIds: query.routeId ? [query.routeId] : undefined,
+      });
+      const items = snapshot.trips.flatMap((trip) =>
+        conflictsFor(trip, snapshot)
+          .filter((c) => !query.severity || c.severity === query.severity)
+          .map((c) => ({
+            ...c,
+            plantId: trip.plantId,
+            routeId: trip.routeId,
+            routeCode: trip.routeCode,
+            serviceDate: trip.serviceDate,
+            scheduledStartAt: trip.startAt.toISOString(),
+          })),
+      );
+      return {
+        from,
+        to,
+        total: items.length,
+        errors: items.filter((c) => c.severity === 'error').length,
+        items,
+      };
     },
 
     async listTrips(
@@ -127,6 +297,8 @@ export function createScheduleService(deps: { horizonDays: number; timeZone: str
             route: { select: { code: true, name: true } },
             shift: { select: { name: true } },
             plant: { select: { name: true } },
+            driver: { select: { fullName: true } },
+            vehicle: { select: { economicNumber: true } },
           },
           orderBy: [{ scheduledStartAt: 'asc' }, { id: 'asc' }],
           skip: (query.page - 1) * query.pageSize,
@@ -158,6 +330,11 @@ export function createScheduleService(deps: { horizonDays: number; timeZone: str
           scheduledEndAt: trip.scheduledEndAt.toISOString(),
           isHoliday: trip.isHoliday,
           cancelReason: trip.cancelReason,
+          driverId: trip.driverId,
+          driverName: trip.driver?.fullName ?? null,
+          vehicleId: trip.vehicleId,
+          vehicleNumber: trip.vehicle?.economicNumber ?? null,
+          assignmentSource: trip.assignmentSource,
         })),
       };
     },

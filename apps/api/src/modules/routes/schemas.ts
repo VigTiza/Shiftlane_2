@@ -114,6 +114,9 @@ export const versionInput = z
 export const createRouteBody = z.object({
   plantId: z.uuid(),
   shiftId: z.uuid().nullable().optional(),
+  /** Chofer y unidad habituales (se asignan solos a los viajes nuevos). */
+  habitualDriverId: z.uuid().nullable().optional(),
+  habitualVehicleId: z.uuid().nullable().optional(),
   code: z.string().trim().min(1, 'Escribe la clave de la ruta.').max(20),
   name: z.string().trim().min(2, 'Escribe el nombre de la ruta.').max(120),
   direction: directionSchema,
@@ -124,6 +127,8 @@ export const createRouteBody = z.object({
 export const updateRouteBody = z
   .object({
     shiftId: z.uuid().nullable().optional(),
+    habitualDriverId: z.uuid().nullable().optional(),
+    habitualVehicleId: z.uuid().nullable().optional(),
     code: z.string().trim().min(1).max(20).optional(),
     name: z.string().trim().min(2).max(120).optional(),
     direction: directionSchema.optional(),
@@ -183,6 +188,8 @@ export const routeSummary = z.object({
   id: z.uuid(),
   plantId: z.uuid(),
   shiftId: z.uuid().nullable(),
+  habitualDriverId: z.uuid().nullable(),
+  habitualVehicleId: z.uuid().nullable(),
   code: z.string(),
   name: z.string(),
   direction: directionSchema,

@@ -65,6 +65,25 @@ export function createRoutesService(deps: { routing: RoutingProvider; averageSpe
       throw new BadRequestError('La planta no tiene un acuerdo de servicio activo con tu empresa.');
   }
 
+  /** El chofer y la unidad habituales deben ser de la transportista (la RLS filtra). */
+  async function assertCrew(
+    tx: DbTransaction,
+    input: { habitualDriverId?: Optional<string>; habitualVehicleId?: Optional<string> },
+  ) {
+    if (input.habitualDriverId) {
+      const driver = await tx.driver.findFirst({
+        where: { id: input.habitualDriverId, deletedAt: null },
+      });
+      if (!driver) throw new BadRequestError('No se encontró el chofer habitual.');
+    }
+    if (input.habitualVehicleId) {
+      const vehicle = await tx.vehicle.findFirst({
+        where: { id: input.habitualVehicleId, deletedAt: null },
+      });
+      if (!vehicle) throw new BadRequestError('No se encontró la unidad habitual.');
+    }
+  }
+
   async function assertShift(tx: DbTransaction, plantId: string, shiftId: Optional<string>) {
     if (!shiftId) return;
     const shift = await tx.shift.findFirst({ where: { id: shiftId, deletedAt: null } });
@@ -324,6 +343,8 @@ export function createRoutesService(deps: { routing: RoutingProvider; averageSpe
         id: route.id,
         plantId: route.plantId,
         shiftId: route.shiftId,
+        habitualDriverId: route.habitualDriverId,
+        habitualVehicleId: route.habitualVehicleId,
         code: route.code,
         name: route.name,
         direction: route.direction,
@@ -509,6 +530,8 @@ export function createRoutesService(deps: { routing: RoutingProvider; averageSpe
       input: {
         plantId: string;
         shiftId?: Optional<string>;
+        habitualDriverId?: Optional<string>;
+        habitualVehicleId?: Optional<string>;
         code: string;
         name: string;
         direction: Route['direction'];
@@ -518,6 +541,7 @@ export function createRoutesService(deps: { routing: RoutingProvider; averageSpe
     ) {
       await assertServedPlant(tx, tenantId, input.plantId);
       await assertShift(tx, input.plantId, input.shiftId);
+      await assertCrew(tx, input);
       let route: Route;
       try {
         route = await tx.route.create({
@@ -525,6 +549,8 @@ export function createRoutesService(deps: { routing: RoutingProvider; averageSpe
             tenantId,
             plantId: input.plantId,
             shiftId: input.shiftId ?? null,
+            habitualDriverId: input.habitualDriverId ?? null,
+            habitualVehicleId: input.habitualVehicleId ?? null,
             code: input.code,
             name: input.name,
             direction: input.direction,
@@ -545,6 +571,8 @@ export function createRoutesService(deps: { routing: RoutingProvider; averageSpe
       id: string,
       input: {
         shiftId?: Optional<string>;
+        habitualDriverId?: Optional<string>;
+        habitualVehicleId?: Optional<string>;
         code?: string | undefined;
         name?: string | undefined;
         direction?: Route['direction'] | undefined;
@@ -554,6 +582,7 @@ export function createRoutesService(deps: { routing: RoutingProvider; averageSpe
     ) {
       const route = await findRoute(tx, id);
       if (input.shiftId !== undefined) await assertShift(tx, route.plantId, input.shiftId);
+      await assertCrew(tx, input);
       try {
         await tx.route.update({ where: { id }, data: clean(input) });
       } catch (error) {

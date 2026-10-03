@@ -1,8 +1,10 @@
 import { dateString } from '../../lib/http-schemas.ts';
 import { z } from '../../lib/zod.ts';
+import { CONFLICT_TYPES } from './conflicts.ts';
 
 export const MAX_GENERATION_DAYS = 62;
 export const MAX_LIST_DAYS = 62;
+export const MAX_CONFLICT_DAYS = 31;
 
 export const generateBody = z
   .object({ from: dateString, to: dateString })
@@ -18,6 +20,8 @@ export const generationResult = z.object({
   updated: z.number().int(),
   cancelled: z.number().int(),
   unchanged: z.number().int(),
+  /** Viajes a los que se asignaron chofer y unidad habituales. */
+  assigned: z.number().int(),
 });
 
 export const tripStatusSchema = z.enum(['scheduled', 'in_progress', 'completed', 'cancelled']);
@@ -60,6 +64,12 @@ export const tripSummary = z.object({
   scheduledEndAt: z.iso.datetime(),
   isHoliday: z.boolean(),
   cancelReason: z.string().nullable(),
+  driverId: z.uuid().nullable(),
+  driverName: z.string().nullable(),
+  vehicleId: z.uuid().nullable(),
+  vehicleNumber: z.string().nullable(),
+  /** habitual (programación), manual (usuario) o copied (semana anterior). */
+  assignmentSource: z.enum(['habitual', 'manual', 'copied']).nullable(),
 });
 
 export const tripPage = z.object({
@@ -112,4 +122,121 @@ export const importOfficialResult = z.object({
   created: z.number().int(),
   skipped: z.number().int(),
   holidays: z.array(holidaySummary),
+});
+
+// --- Asignación y conflictos -------------------------------------------------------------
+
+export const assignmentBody = z
+  .object({
+    /** null quita el chofer; omitido lo conserva. */
+    driverId: z.uuid().nullable().optional(),
+    vehicleId: z.uuid().nullable().optional(),
+    /** Confirma la asignación aunque tenga conflictos que bloquean. */
+    force: z.boolean().default(false),
+  })
+  .refine((body) => body.driverId !== undefined || body.vehicleId !== undefined, {
+    message: 'Indica el chofer o la unidad.',
+  });
+
+const severitySchema = z.enum(['error', 'warning']);
+
+export const conflictSchema = z.object({
+  tripId: z.uuid(),
+  type: z.enum(CONFLICT_TYPES),
+  severity: severitySchema,
+  message: z.string(),
+  otherTripId: z.uuid().optional(),
+  suggestion: z
+    .object({
+      message: z.string(),
+      options: z.array(
+        z.object({ kind: z.enum(['driver', 'vehicle']), id: z.uuid(), label: z.string() }),
+      ),
+    })
+    .optional(),
+});
+
+export const assignmentResponse = z.object({
+  trip: tripSummary,
+  conflicts: z.array(conflictSchema),
+});
+
+export const conflictsQuery = z
+  .object({
+    /** Por omisión, hoy y los seis días siguientes. */
+    from: dateString.optional(),
+    to: dateString.optional(),
+    plantId: z.uuid().optional(),
+    routeId: z.uuid().optional(),
+    severity: severitySchema.optional(),
+  })
+  .refine((query) => !query.from || !query.to || query.from <= query.to, {
+    message: 'La fecha final no puede ser anterior a la inicial.',
+    path: ['to'],
+  });
+
+export const conflictsResponse = z.object({
+  from: z.string(),
+  to: z.string(),
+  total: z.number().int(),
+  errors: z.number().int(),
+  items: z.array(
+    conflictSchema.extend({
+      plantId: z.uuid(),
+      routeId: z.uuid().nullable(),
+      routeCode: z.string().nullable(),
+      serviceDate: z.string(),
+      scheduledStartAt: z.iso.datetime(),
+    }),
+  ),
+});
+
+export const autoAssignBody = z
+  .object({
+    from: dateString,
+    to: dateString,
+    plantId: z.uuid().optional(),
+    routeId: z.uuid().optional(),
+  })
+  .refine((body) => body.from <= body.to, {
+    message: 'La fecha final no puede ser anterior a la inicial.',
+    path: ['to'],
+  });
+
+const skippedAssignment = z.object({
+  tripId: z.uuid(),
+  routeCode: z.string().nullable(),
+  serviceDate: z.string(),
+  reasons: z.array(z.string()),
+});
+
+export const autoAssignResponse = z.object({
+  assigned: z.number().int(),
+  unchanged: z.number().int(),
+  skipped: z.array(skippedAssignment),
+});
+
+const monday = dateString.refine(
+  (date) => new Date(`${date}T12:00:00Z`).getUTCDay() === 1,
+  'La semana debe empezar en lunes.',
+);
+
+export const copyWeekBody = z.object({
+  sourceWeekStart: monday,
+  /** Por omisión, la semana siguiente a la de origen. */
+  targetWeekStart: monday.optional(),
+  plantId: z.uuid().optional(),
+  routeId: z.uuid().optional(),
+  /** Reemplaza también las asignaciones manuales de la semana destino. */
+  overwrite: z.boolean().default(false),
+});
+
+export const copyWeekResponse = z.object({
+  sourceWeekStart: z.string(),
+  targetWeekStart: z.string(),
+  /** Viajes que se generaron en la semana destino antes de copiar. */
+  generated: z.number().int(),
+  copied: z.number().int(),
+  unchanged: z.number().int(),
+  skipped: z.array(skippedAssignment),
 });

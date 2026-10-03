@@ -3,8 +3,16 @@ import type { FastifyPluginCallbackZod } from 'fastify-type-provider-zod';
 import { withDbContext } from '../../lib/db.ts';
 import { idParams } from '../../lib/http-schemas.ts';
 import { z } from '../../lib/zod.ts';
-import { dbContextOf, requirePermission, tenantIdOf } from '../../plugins/auth.ts';
+import { authOf, dbContextOf, requirePermission, tenantIdOf } from '../../plugins/auth.ts';
 import {
+  assignmentBody,
+  assignmentResponse,
+  autoAssignBody,
+  autoAssignResponse,
+  conflictsQuery,
+  conflictsResponse,
+  copyWeekBody,
+  copyWeekResponse,
   createHolidayBody,
   generateBody,
   generationResult,
@@ -21,6 +29,7 @@ const TAGS = ['Programación'];
 
 export const scheduleRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   const service = app.schedule;
+  const canRead = requirePermission(app, 'schedule.read');
   const canWrite = requirePermission(app, 'schedule.write');
   // La planta ve los viajes de sus transportistas (la seguridad por filas filtra cuáles).
   const canReadTrips = requirePermission(app, 'schedule.read', 'plant.dashboard');
@@ -62,6 +71,94 @@ export const scheduleRoutes: FastifyPluginCallbackZod = (app, _options, done) =>
     },
     (request) =>
       withDbContext(app.db.app, dbContextOf(request), (tx) => service.listTrips(tx, request.query)),
+  );
+
+  app.put(
+    '/trips/:id/assignment',
+    {
+      onRequest: canWrite,
+      schema: {
+        tags: TAGS,
+        summary: 'Asigna unidad y chofer a un viaje programado',
+        description:
+          'Revisa conflictos (chofer u unidad en dos viajes, unidad en mantenimiento, documentos vencidos, licencia, cupo). Si hay conflictos que bloquean responde 409 con el detalle; con force: true asigna de todos modos.',
+        params: idParams,
+        body: assignmentBody,
+        response: { 200: assignmentResponse },
+      },
+    },
+    (request) =>
+      withDbContext(app.db.app, dbContextOf(request), (tx) =>
+        service.assign(
+          tx,
+          tenantIdOf(request),
+          authOf(request, 'user').sub,
+          request.params.id,
+          request.body,
+        ),
+      ),
+  );
+
+  app.post(
+    '/schedule/auto-assign',
+    {
+      onRequest: canWrite,
+      schema: {
+        tags: TAGS,
+        summary: 'Asigna el chofer y la unidad habituales de cada ruta a los viajes sin asignar',
+        description:
+          'No reemplaza asignaciones manuales ni copiadas, y deja sin asignar los viajes donde la asignación habitual tendría un conflicto que bloquea.',
+        body: autoAssignBody,
+        response: { 200: autoAssignResponse },
+      },
+    },
+    (request) =>
+      withDbContext(
+        app.db.app,
+        dbContextOf(request),
+        (tx) => service.autoAssign(tx, tenantIdOf(request), request.body),
+        { timeout: 60_000 },
+      ),
+  );
+
+  app.post(
+    '/schedule/copy-week',
+    {
+      onRequest: canWrite,
+      schema: {
+        tags: TAGS,
+        summary: 'Copia la asignación de unidades y choferes de una semana a otra',
+        description:
+          'Genera los viajes de la semana destino y copia la asignación por ruta y día. Respeta las asignaciones manuales salvo con overwrite: true y no copia las que crean conflictos que bloquean.',
+        body: copyWeekBody,
+        response: { 200: copyWeekResponse },
+      },
+    },
+    (request) =>
+      withDbContext(
+        app.db.app,
+        dbContextOf(request),
+        (tx) =>
+          service.copyWeek(tx, tenantIdOf(request), authOf(request, 'user').sub, request.body),
+        { timeout: 60_000 },
+      ),
+  );
+
+  app.get(
+    '/schedule/conflicts',
+    {
+      onRequest: canRead,
+      schema: {
+        tags: TAGS,
+        summary: 'Conflictos de la programación con sugerencia de solución',
+        querystring: conflictsQuery,
+        response: { 200: conflictsResponse },
+      },
+    },
+    (request) =>
+      withDbContext(app.db.app, dbContextOf(request), (tx) =>
+        service.conflicts(tx, tenantIdOf(request), request.query),
+      ),
   );
 
   app.get(

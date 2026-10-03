@@ -2,6 +2,7 @@ import { addDays, todayIn } from '@shiftlane/shared';
 import type { FastifyBaseLogger } from 'fastify';
 
 import type { DbClient } from '../lib/db.ts';
+import { autoAssign } from '../modules/schedule/assignments.ts';
 import { generateTrips } from '../modules/schedule/generator.ts';
 import type { GenerationResult } from '../modules/schedule/generator.ts';
 
@@ -14,6 +15,7 @@ export interface TripHorizonRun extends GenerationResult {
   tenants: number;
   skipped: number;
   failed: number;
+  assigned: number;
 }
 
 /**
@@ -50,6 +52,7 @@ export async function ensureTripHorizon(
     tenants: tenants.length,
     skipped: 0,
     failed: 0,
+    assigned: 0,
     created: 0,
     updated: 0,
     cancelled: 0,
@@ -62,7 +65,9 @@ export async function ensureTripHorizon(
           const [lock] = await tx.$queryRaw<{ locked: boolean }[]>`
             SELECT pg_try_advisory_xact_lock(hashtext(${`trip-horizon:${tenant.id}`})) AS locked`;
           if (!lock?.locked) return null;
-          return generateTrips(tx, { tenantId: tenant.id, from, to });
+          const generated = await generateTrips(tx, { tenantId: tenant.id, from, to });
+          const assignment = await autoAssign(tx, tenant.id, { from, to });
+          return { ...generated, assigned: assignment.assigned };
         },
         { timeout: 120_000 },
       );
@@ -74,6 +79,7 @@ export async function ensureTripHorizon(
       run.updated += result.updated;
       run.cancelled += result.cancelled;
       run.unchanged += result.unchanged;
+      run.assigned += result.assigned;
     } catch (error) {
       run.failed += 1;
       options.log?.error({ err: error, tenantId: tenant.id }, 'No se pudieron generar los viajes');

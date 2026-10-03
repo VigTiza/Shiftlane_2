@@ -38,6 +38,8 @@ export const createVehicleBody = z.object({
   model: z.string().trim().min(1, 'Escribe el modelo.').max(60),
   year,
   capacity,
+  /** Tipo de licencia que exige la unidad (por ejemplo, «Federal B»). */
+  requiredLicenseType: optionalText(40),
   status: vehicleStatus.default('available'),
   odometerKm: odometerKm.default(0),
   notes: optionalText(1000),
@@ -73,6 +75,7 @@ export const vehicleSummary = z.object({
   model: z.string(),
   year: z.number().int(),
   capacity: z.number().int(),
+  requiredLicenseType: z.string().nullable(),
   status: vehicleStatus,
   odometerKm: z.number().int(),
   hasPhoto: z.boolean(),

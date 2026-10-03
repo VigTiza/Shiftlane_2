@@ -203,6 +203,10 @@ export function createDriversService(deps: { storage: ObjectStorage; timeZone: s
         where: { id },
         data: { deletedAt: new Date(), status: 'inactive' },
       });
+      await tx.route.updateMany({
+        where: { habitualDriverId: id },
+        data: { habitualDriverId: null },
+      });
       await tx.driverDevice.updateMany({
         where: { driverId: id, revokedAt: null },
         data: { revokedAt: new Date() },

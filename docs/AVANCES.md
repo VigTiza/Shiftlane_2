@@ -2,8 +2,8 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F04 — Programación de servicios
-- Último prompt completado: F04-P01 Generador de viajes
-- Siguiente prompt: F04-P02 Asignación y conflictos
+- Último prompt completado: F04-P02 Asignación y conflictos
+- Siguiente prompt: F04-P03 Viajes extraordinarios y solicitudes
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -16,7 +16,6 @@
   - GitHub: origin = https://github.com/VigTiza/Shiftlane_2 (público), con acceso por el
     administrador de credenciales de Git. El CI pasó completo (incluye Testcontainers y
     Flutter en GitHub). Revisar el resultado tras cada push.
-  - F04-P02: llenar chofer en los viajes de la simulación y la lista de choferes afectados.
   - Tareas programadas: hoy corren dentro de la API (temporizador + candado de PostgreSQL).
     Pasarlas a BullMQ cuando Redis esté disponible (tras el reinicio y Docker).
   - Deuda técnica: varios servicios usan Promise.all dentro de transacciones (pg avisa que
@@ -107,7 +106,34 @@
 - 2026-10-03 Festivos por transportista, generales o por planta, con «hay servicio» (se marca
   is_holiday para tarifa especial) o «sin servicio». Se importan los de la LFT art. 74.
 
+- 2026-10-03 Asignación con origen (habitual, manual, copiada). La automática nunca reemplaza
+  manuales ni copiadas y no asigna si crea un conflicto que bloquea (queda pendiente y se
+  reporta). La manual con conflictos que bloquean responde 409 y se confirma con force (la
+  operación nunca queda bloqueada por el sistema). Capacidad y viaje sin asignar son avisos.
+- 2026-10-03 Un documento vence al terminar su fecha de vencimiento; si hay varios del mismo
+  tipo cuenta el más reciente. Los de tipo «otro» no bloquean.
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F04-P02 Asignación y conflictos
+- Hecho: migración assignments (trips.driver_id, vehicle_id, assignment_source, assigned_at,
+  assigned_by; routes.habitual_driver_id/habitual_vehicle_id; vehicles.required_license_type).
+  Detector de conflictos puro (conflicts.ts) con sugerencias: chofer o unidad en dos viajes,
+  unidad no disponible, documentos vencidos, licencia, chofer inactivo, capacidad y sin
+  asignar. Asignación manual (409 o force), automática por habituales (al generar, al editar
+  la ruta y en la tarea diaria), copia de semana, consulta de conflictos. /trips muestra chofer
+  y unidad; la simulación lista choferes afectados. Al dar de baja chofer o unidad se quitan
+  de las rutas como habituales.
+- Archivos principales: apps/api/src/modules/schedule/{conflicts,assignments,service,routes,
+  schemas}.ts, prisma/migrations/*_assignments.
+- Pruebas agregadas / resultado: 13 unitarias del detector (un caso por tipo y sugerencias) y
+  13 de integración (habituales, cambio de habitual, conflicto en la automática, bloqueo y
+  confirmación, cada conflicto por la API, validaciones y permisos, copia de semana con
+  manuales y overwrite, choferes en la simulación). 262 pruebas de la API en verde.
+- Problemas encontrados y cómo se resolvieron: Prisma no acepta tenant_id en creaciones
+  anidadas con llave compuesta (lo toma de la relación).
+- Pendiente para después: unidades fuera de servicio con fecha estimada de regreso (F11-P02
+  mantenimiento); calendario visual con arrastrar y soltar (F08-P04).
+
 ### 2026-10-03 — F04-P01 Generador de viajes
 - Hecho: packages/shared/src/calendar.ts (festivos LFT art. 74 con lunes móviles y
   transmisión del Ejecutivo; hora local a UTC con horario de verano). Migración trips:

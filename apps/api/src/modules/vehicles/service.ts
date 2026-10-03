@@ -19,6 +19,7 @@ type VehicleInput = {
   model?: string | undefined;
   year?: number | undefined;
   capacity?: number | undefined;
+  requiredLicenseType?: string | null | undefined;
   status?: Vehicle['status'] | undefined;
   odometerKm?: number | undefined;
   notes?: string | null | undefined;
@@ -67,6 +68,7 @@ export function createVehiclesService(deps: { storage: ObjectStorage; timeZone: 
       model: vehicle.model,
       year: vehicle.year,
       capacity: vehicle.capacity,
+      requiredLicenseType: vehicle.requiredLicenseType,
       status: vehicle.status,
       odometerKm: vehicle.odometerKm,
       hasPhoto: vehicle.photoKey !== null,
@@ -193,6 +195,10 @@ export function createVehiclesService(deps: { storage: ObjectStorage; timeZone: 
     async remove(tx: DbTransaction, id: string) {
       await findVehicle(tx, id);
       await tx.driver.updateMany({
+        where: { habitualVehicleId: id },
+        data: { habitualVehicleId: null },
+      });
+      await tx.route.updateMany({
         where: { habitualVehicleId: id },
         data: { habitualVehicleId: null },
       });

@@ -404,6 +404,8 @@ model Driver {
   devices         DriverDevice[]
   sessions        Session[]
   documents       DriverDocument[]
+  habitualRoutes  Route[]            @relation("RouteHabitualDriver")
+  trips           Trip[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, employeeNumber])
@@ -535,27 +537,31 @@ enum VehicleStatus {
 }
 
 model Vehicle {
-  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId       String        @map("tenant_id") @db.Uuid
+  id                  String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String        @map("tenant_id") @db.Uuid
   /// Número económico: identificador interno de la unidad en la transportista.
-  economicNumber String        @map("economic_number")
-  plates         String
-  make           String?
-  model          String
-  year           Int
+  economicNumber      String        @map("economic_number")
+  plates              String
+  make                String?
+  model               String
+  year                Int
   /// Asientos para pasajeros.
-  capacity       Int
-  status         VehicleStatus @default(available)
-  odometerKm     Int           @default(0) @map("odometer_km")
-  photoKey       String?       @map("photo_key")
-  notes          String?
-  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt      DateTime?     @map("deleted_at") @db.Timestamptz(3)
+  capacity            Int
+  /// Tipo de licencia que exige la unidad (por ejemplo, "Federal B"); vacío = cualquiera.
+  requiredLicenseType String?       @map("required_license_type")
+  status              VehicleStatus @default(available)
+  odometerKm          Int           @default(0) @map("odometer_km")
+  photoKey            String?       @map("photo_key")
+  notes               String?
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt           DateTime?     @map("deleted_at") @db.Timestamptz(3)
 
   tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   documents       VehicleDocument[]
   habitualDrivers Driver[]
+  habitualRoutes  Route[]           @relation("RouteHabitualVehicle")
+  trips           Trip[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, economicNumber])
@@ -998,22 +1004,27 @@ enum RouteDirection {
 }
 
 model Route {
-  id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId  String         @map("tenant_id") @db.Uuid
-  plantId   String         @map("plant_id") @db.Uuid
-  shiftId   String?        @map("shift_id") @db.Uuid
-  code      String
-  name      String
-  direction RouteDirection
-  active    Boolean        @default(true)
-  notes     String?
-  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt DateTime?      @map("deleted_at") @db.Timestamptz(3)
+  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String         @map("tenant_id") @db.Uuid
+  plantId           String         @map("plant_id") @db.Uuid
+  shiftId           String?        @map("shift_id") @db.Uuid
+  code              String
+  name              String
+  direction         RouteDirection
+  /// Chofer y unidad habituales: la programación los asigna sola a los viajes nuevos.
+  habitualDriverId  String?        @map("habitual_driver_id") @db.Uuid
+  habitualVehicleId String?        @map("habitual_vehicle_id") @db.Uuid
+  active            Boolean        @default(true)
+  notes             String?
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt         DateTime?      @map("deleted_at") @db.Timestamptz(3)
 
   tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   plant            Plant             @relation(fields: [plantId], references: [id], onDelete: Restrict)
   shift            Shift?            @relation(fields: [shiftId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  habitualDriver   Driver?           @relation("RouteHabitualDriver", fields: [habitualDriverId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  habitualVehicle  Vehicle?          @relation("RouteHabitualVehicle", fields: [habitualVehicleId, tenantId], references: [id, tenantId], onDelete: Restrict)
   versions         RouteVersion[]
   temporaryChanges TemporaryChange[]
   rates            Rate[]
@@ -1195,37 +1206,56 @@ enum TripKind {
   extra
 }
 
+/// Origen de la asignación de unidad y chofer de un viaje.
+enum TripAssignmentSource {
+  /// La puso la programación según el chofer y la unidad habituales de la ruta.
+  habitual
+  /// La eligió un usuario.
+  manual
+  /// Se copió de la semana anterior.
+  copied
+}
+
 /// Viaje programado. Los regulares los genera el sistema (generation_key = ruta + día).
 model Trip {
-  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId          String         @map("tenant_id") @db.Uuid
-  plantId           String         @map("plant_id") @db.Uuid
-  routeId           String?        @map("route_id") @db.Uuid
-  routeVersionId    String?        @map("route_version_id") @db.Uuid
-  shiftId           String?        @map("shift_id") @db.Uuid
-  temporaryChangeId String?        @map("temporary_change_id") @db.Uuid
-  kind              TripKind       @default(regular)
-  status            TripStatus     @default(scheduled)
+  id                String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String                @map("tenant_id") @db.Uuid
+  plantId           String                @map("plant_id") @db.Uuid
+  routeId           String?               @map("route_id") @db.Uuid
+  routeVersionId    String?               @map("route_version_id") @db.Uuid
+  shiftId           String?               @map("shift_id") @db.Uuid
+  temporaryChangeId String?               @map("temporary_change_id") @db.Uuid
+  kind              TripKind              @default(regular)
+  status            TripStatus            @default(scheduled)
   direction         RouteDirection
-  serviceDate       DateTime       @map("service_date") @db.Date
-  scheduledStartAt  DateTime       @map("scheduled_start_at") @db.Timestamptz(3)
-  scheduledEndAt    DateTime       @map("scheduled_end_at") @db.Timestamptz(3)
-  isHoliday         Boolean        @default(false) @map("is_holiday")
+  serviceDate       DateTime              @map("service_date") @db.Date
+  scheduledStartAt  DateTime              @map("scheduled_start_at") @db.Timestamptz(3)
+  scheduledEndAt    DateTime              @map("scheduled_end_at") @db.Timestamptz(3)
+  isHoliday         Boolean               @default(false) @map("is_holiday")
+  driverId          String?               @map("driver_id") @db.Uuid
+  vehicleId         String?               @map("vehicle_id") @db.Uuid
+  assignmentSource  TripAssignmentSource? @map("assignment_source")
+  assignedAt        DateTime?             @map("assigned_at") @db.Timestamptz(3)
+  assignedByUserId  String?               @map("assigned_by_user_id") @db.Uuid
   /// Llave de idempotencia de los viajes regulares: "<ruta>:<AAAA-MM-DD>".
-  generationKey     String?        @unique @map("generation_key")
-  cancelReason      String?        @map("cancel_reason")
+  generationKey     String?               @unique @map("generation_key")
+  cancelReason      String?               @map("cancel_reason")
   notes             String?
-  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt         DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   plant        Plant         @relation(fields: [plantId], references: [id], onDelete: Restrict)
   route        Route?        @relation(fields: [routeId, tenantId], references: [id, tenantId], onDelete: Restrict)
   routeVersion RouteVersion? @relation(fields: [routeVersionId, tenantId], references: [id, tenantId], onDelete: Restrict)
   shift        Shift?        @relation(fields: [shiftId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  driver       Driver?       @relation(fields: [driverId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  vehicle      Vehicle?      @relation(fields: [vehicleId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@index([tenantId, serviceDate])
+  @@index([driverId, scheduledStartAt])
+  @@index([vehicleId, scheduledStartAt])
   @@index([routeId, serviceDate])
   @@index([plantId, serviceDate])
   @@map("trips")
