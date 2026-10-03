@@ -19,6 +19,7 @@
     "typecheck": "pnpm -r --if-present run typecheck",
     "db:migrate": "pnpm --filter @shiftlane/api run db:migrate",
     "db:seed": "pnpm --filter @shiftlane/api run db:seed",
+    "simulate": "pnpm --filter @shiftlane/api run simulate",
     "docs:referencia": "python infra/scripts/docx-a-markdown.py",
     "docs:verificar": "python infra/scripts/docx-a-markdown.py --verificar",
     "docs:permisos": "node packages/shared/scripts/actualizar-matriz.ts"

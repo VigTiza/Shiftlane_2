@@ -278,7 +278,7 @@ describe('diagnóstico de una unidad que deja de reportar', () => {
 
   it('la alerta de unidad sin reportar incluye la causa probable', async () => {
     const trip = await silentTrip([{ ...HEALTHY, batteryPct: 4, recordedAt: at(9) }]);
-    await app.alerts.runMinute();
+    await app.alerts.runMinute(new Date(), { tenantIds: [tenantId] });
     const alert = await app.db.system.alert.findFirstOrThrow({
       where: { tripId: trip.id, type: 'device_silent' },
     });

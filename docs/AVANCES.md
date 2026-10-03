@@ -1,9 +1,9 @@
 # AVANCES — Shiftlane
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
-- Fase actual: F06 — Alertas y diagnóstico
-- Último prompt completado: F06-P02 Reportes de salud del celular y diagnóstico
-- Siguiente prompt: F06-P03 Simulador de flota
+- Fase actual: F07 — App del chofer (Flutter)
+- Último prompt completado: F06-P03 Simulador de flota (fase F06 terminada)
+- Siguiente prompt: F07-P01 Proyecto Flutter y arquitectura
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -158,7 +158,27 @@
   la consulta de huecos se hace al abrir la alerta de unidad sin reportar (una vez por
   alerta, no cada minuto).
 
+- 2026-10-03 El simulador maneja cada unidad por la API como un celular real (mismos
+  endpoints que la app) y crea su propia empresa en cada corrida para no mezclarse con datos
+  reales. Los tokens de sus choferes duran todo el turno.
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F06-P03 Simulador de flota
+- Hecho: apps/api/scripts/simulator (plan determinista con semilla, preparación de la
+  empresa, rutas por la API, choferes, unidades, pasajeros y viajes; turno con checklist,
+  inicio, posiciones, escaneos por parada, salud del celular, puerta y fin). Escenarios:
+  retraso, desvío, celular sin batería y zona sin señal con sincronización al salir.
+  `pnpm simulate` (documentado en CLAUDE.md). Probado contra la API local con 7 unidades.
+- Archivos principales: apps/api/scripts/simulator/{index,plan,setup,run}.ts.
+- Pruebas agregadas / resultado: 4 del plan y 5 de una corrida corta contra la API de prueba
+  (unidades normales completas, alerta de retraso, desvío que se cierra solo, celular sin
+  batería con causa probable, zona sin señal sincronizada). 364 pruebas de la API en verde.
+- Problemas encontrados y cómo se resolvieron: con 4 paradas y hasta 5 pasajeros por parada
+  aparecía sobrecupo no planeado; las unidades simuladas tienen 24 asientos. Una prueba de
+  alertas evaluaba todas las empresas de la base compartida y abría antes la alerta del
+  simulador: runMinute acepta tenantIds y las pruebas evalúan solo su empresa.
+- Pendiente para después: usarlo para probar el panel (F08) y el portal (F09).
+
 ### 2026-10-03 — F06-P02 Reportes de salud del celular y diagnóstico
 - Hecho: migración device_health (reportes inmutables con RLS). Evaluación de salud pura
   (impide iniciar o avisa) con versión mínima configurable; POST /driver/health con

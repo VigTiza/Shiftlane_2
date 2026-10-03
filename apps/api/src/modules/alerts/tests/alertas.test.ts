@@ -217,8 +217,8 @@ describe('reglas de alertas con datos simulados', () => {
     const driver = await newDriver();
     const late = await newTrip({ driverId: driver.id, startOffsetMinutes: -12 });
     const onTime = await newTrip({ driverId: driver.id, startOffsetMinutes: -2 });
-    await app.alerts.runMinute();
-    await app.alerts.runMinute();
+    await app.alerts.runMinute(new Date(), { tenantIds: [tenantId] });
+    await app.alerts.runMinute(new Date(), { tenantIds: [tenantId] });
     const [alert, ...rest] = await alertsOf(late.id, 'trip_not_started');
     expect(rest).toEqual([]);
     expect(alert).toMatchObject({ status: 'open', severity: 'warning', plantId });
@@ -322,7 +322,7 @@ describe('reglas de alertas con datos simulados', () => {
       moving.id,
       minutesAgo.map((at, i) => ({ at, lat: FAR_AWAY.lat - i * 0.01, lng: FAR_AWAY.lng })),
     );
-    await app.alerts.runMinute(new Date(now));
+    await app.alerts.runMinute(new Date(now), { tenantIds: [tenantId] });
     const [alert] = await alertsOf(stuck.id, 'unscheduled_stop');
     expect(alert!.cause).toMatch(/lleva 9 min detenida fuera de una parada\.$/);
     expect(alert).toMatchObject({ lat: FAR_AWAY.lat, lng: FAR_AWAY.lng });
@@ -393,7 +393,7 @@ describe('reglas de alertas con datos simulados', () => {
       status: 'in_progress',
       startedMinutesAgo: 9,
     });
-    await app.alerts.runMinute();
+    await app.alerts.runMinute(new Date(), { tenantIds: [tenantId] });
     const [alert] = await alertsOf(trip.id, 'device_silent');
     expect(alert!.cause).toMatch(
       /no ha enviado su ubicación desde que inició el viaje \(9 min\)\. Causa probable: No hay reportes de salud de este celular\.$/,
@@ -504,9 +504,9 @@ describe('atención, escalamiento y configuración', () => {
       .expect(200);
 
     // Todavía no: el retraso escala a los 15 minutos.
-    await app.alerts.runMinute(new Date(Date.now() + 5 * MINUTE));
+    await app.alerts.runMinute(new Date(Date.now() + 5 * MINUTE), { tenantIds: [tenantId] });
     expect((await alertsOf(trip.id, 'delay'))[0]!.escalatedAt).toBeNull();
-    await app.alerts.runMinute(new Date(Date.now() + 16 * MINUTE));
+    await app.alerts.runMinute(new Date(Date.now() + 16 * MINUTE), { tenantIds: [tenantId] });
     const [escalated] = await alertsOf(trip.id, 'delay');
     expect(escalated!.escalatedAt).not.toBeNull();
     const actions = await app.db.system.alertAction.findMany({ where: { alertId: escalated!.id } });
@@ -546,7 +546,7 @@ describe('atención, escalamiento y configuración', () => {
     try {
       const driver = await newDriver();
       const late = await newTrip({ driverId: driver.id, startOffsetMinutes: -20 });
-      await app.alerts.runMinute();
+      await app.alerts.runMinute(new Date(), { tenantIds: [tenantId] });
       expect(await alertsOf(late.id, 'trip_not_started')).toEqual([]);
 
       const full = await newTrip({

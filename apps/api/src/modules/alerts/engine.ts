@@ -415,8 +415,13 @@ export function createAlertEngine(deps: {
   }
 
   /** Evaluación periódica: viajes no iniciados, unidades sin reportar, paradas y escalamiento. */
-  async function runMinute(now = new Date()) {
+  async function runMinute(
+    now = new Date(),
+    /** Limita la evaluación a estas transportistas (soporte y pruebas). */
+    options: { tenantIds?: string[] } = {},
+  ) {
     const result = { notStarted: 0, silent: 0, stopped: 0, escalated: 0 };
+    const scope = options.tenantIds ? { tenantId: { in: options.tenantIds } } : {};
     const rulesCache = new Map<string, RuleSet>();
     const rules = async (tenantId: string) => {
       if (!rulesCache.has(tenantId)) rulesCache.set(tenantId, await rulesFor(system, tenantId));
@@ -425,6 +430,7 @@ export function createAlertEngine(deps: {
 
     const late = await system.trip.findMany({
       where: {
+        ...scope,
         status: 'scheduled',
         driverId: { not: null },
         scheduledStartAt: { lte: now, gte: new Date(now.getTime() - NOT_STARTED_LOOKBACK_MS) },
@@ -462,7 +468,7 @@ export function createAlertEngine(deps: {
     }
 
     const running = await system.trip.findMany({
-      where: { status: 'in_progress' },
+      where: { ...scope, status: 'in_progress' },
       include: {
         route: { select: { code: true } },
         driver: { select: { fullName: true } },
@@ -573,14 +579,18 @@ export function createAlertEngine(deps: {
       if (opened) result.stopped += 1;
     }
 
-    result.escalated = await escalateDue(now, rules);
+    result.escalated = await escalateDue(now, rules, scope);
     return result;
   }
 
   /** Escala al gerente las alertas que nadie atendió a tiempo. */
-  async function escalateDue(now: Date, rules: (tenantId: string) => Promise<RuleSet>) {
+  async function escalateDue(
+    now: Date,
+    rules: (tenantId: string) => Promise<RuleSet>,
+    scope: { tenantId?: { in: string[] } },
+  ) {
     const openAlerts = await system.alert.findMany({
-      where: { status: 'open', escalatedAt: null },
+      where: { ...scope, status: 'open', escalatedAt: null },
     });
     let escalated = 0;
     for (const alert of openAlerts) {

@@ -76,6 +76,13 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
 - `pnpm docs:verificar` — comprueba que los Markdown estén completos, el índice al día y
   el resumen dentro de 80 líneas.
 - Un solo paquete: `pnpm --filter @shiftlane/api test` (lo mismo con web, rider, shared, landing).
+- `pnpm simulate -- --units 30 --minutes 20 --interval 5 [--api http://localhost:3000] [--seed 2026]`
+  — simulador de flota (apps/api/scripts/simulator) contra una API en marcha: crea una empresa
+  «Simulación …» nueva en la base de apps/api/.env (imprime el usuario y la contraseña del panel)
+  y reproduce un turno: posiciones, escaneos, salud del celular, puerta y fin. Escenarios fijos:
+  una unidad que salió tarde (retraso), una que se desvía, un celular que se queda sin batería
+  (su alerta de unidad sin reportar sale 5 min después) y tres que cruzan una zona sin señal
+  (guardan y sincronizan al salir). Con menos de ~10 minutos todas las unidades salen con retraso.
 - CI: .github/workflows/ci.yml (Node con PostgreSQL+PostGIS en contenedor, y Flutter).
 
 ## Convenciones de la API (apps/api)
