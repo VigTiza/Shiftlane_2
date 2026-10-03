@@ -2,8 +2,8 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F06 — Alertas y diagnóstico
-- Último prompt completado: F06-P01 Motor de alertas
-- Siguiente prompt: F06-P02 Reportes de salud del celular y diagnóstico
+- Último prompt completado: F06-P02 Reportes de salud del celular y diagnóstico
+- Siguiente prompt: F06-P03 Simulador de flota
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -153,7 +153,27 @@
   un índice parcial que Prisma no maneja. Escalar = marcar escalatedAt y avisar en tiempo
   real; el aviso por canales al gerente llega con el motor de notificaciones (F14-P01).
 
+- 2026-10-03 Las zonas sin señal se aprenden de los huecos del historial GPS de la empresa
+  (no hay catálogo manual). El diagnóstico es una función pura sobre los reportes de salud;
+  la consulta de huecos se hace al abrir la alerta de unidad sin reportar (una vez por
+  alerta, no cada minuto).
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F06-P02 Reportes de salud del celular y diagnóstico
+- Hecho: migración device_health (reportes inmutables con RLS). Evaluación de salud pura
+  (impide iniciar o avisa) con versión mínima configurable; POST /driver/health con
+  corrección de hora y aviso device.health_changed al cambiar el estado; inventario e
+  historial para el panel. Diagnóstico de causa probable (permiso revocado, batería con
+  tendencia, zona sin señal conocida, sin datos, app cerrada) con endpoint por viaje y dentro
+  de la alerta de unidad sin reportar.
+- Archivos principales: apps/api/src/modules/devices/*, src/modules/alerts/engine.ts,
+  prisma/migrations/*_device_health.
+- Pruebas agregadas / resultado: 13 unitarias (evaluación y cada causa) y 9 de integración
+  (reportes y cambio de estado, hora, aislamiento, diagnóstico por escenario incluida la zona
+  sin señal aprendida, alerta con causa probable). 355 pruebas de la API en verde.
+- Problemas encontrados y cómo se resolvieron: ninguno relevante.
+- Pendiente para después: la app Flutter envía los reportes y bloquea el inicio (F07-P03).
+
 ### 2026-10-03 — F06-P01 Motor de alertas
 - Hecho: migración alerts (alert_rules auditada, alerts con RLS y vista para la planta,
   alert_actions inmutable). Reglas con valores por omisión y umbrales validados por tipo.

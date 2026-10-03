@@ -82,6 +82,11 @@ const envSchema = z
     LIVE_POSITION_TTL_SECONDS: z.coerce.number().int().min(30).default(600),
     /** Días por adelantado con partición del historial GPS ya creada. */
     POSITION_PARTITION_DAYS_AHEAD: z.coerce.number().int().min(1).max(60).default(7),
+    /** Versión mínima de la app del chofer; con una menor no se puede iniciar un viaje. */
+    MIN_DRIVER_APP_VERSION: z
+      .string()
+      .regex(/^\d+(\.\d+)*$/)
+      .optional(),
   })
   .superRefine((env, ctx) => {
     if (env.ROUTING_PROVIDER === 'osrm' && !env.ROUTING_URL) {

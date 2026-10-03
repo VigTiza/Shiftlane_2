@@ -396,7 +396,7 @@ describe('reglas de alertas con datos simulados', () => {
     await app.alerts.runMinute();
     const [alert] = await alertsOf(trip.id, 'device_silent');
     expect(alert!.cause).toMatch(
-      /no ha enviado su ubicación desde que inició el viaje \(9 min\)\.$/,
+      /no ha enviado su ubicación desde que inició el viaje \(9 min\)\. Causa probable: No hay reportes de salud de este celular\.$/,
     );
     expect(alert!.suggestedAction).toBe(
       'Llama al chofer y revisa la batería y los datos del celular.',

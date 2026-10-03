@@ -6,6 +6,7 @@ import type { Database } from '../../lib/db.ts';
 import type { DomainEvent, DomainEvents } from '../../lib/domain-events.ts';
 import type { LiveStore } from '../../lib/live-store.ts';
 import type { Alert, Prisma } from '../../generated/prisma/client.ts';
+import { diagnoseTrip } from '../devices/diagnosis.ts';
 import type { RoutesService } from '../routes/service.ts';
 import { ALERT_TYPE_LABELS, rulesFor } from './rules.ts';
 import type { AlertType, RuleSet } from './rules.ts';
@@ -480,18 +481,36 @@ export function createAlertEngine(deps: {
         .sort((a, b) => b.getTime() - a.getTime())[0];
       const reference = lastReport ?? trip.actualStartAt ?? trip.scheduledStartAt;
       const silentFor = minutesBetween(reference, now);
-      if (silentFor >= set.device_silent.params.minutes) {
+      const alreadySilent = await system.alert.findFirst({
+        where: {
+          tenantId: trip.tenantId,
+          dedupeKey: dedupeKey('device_silent', trip.id),
+          status: { not: 'resolved' },
+        },
+        select: { id: true },
+      });
+      if (silentFor >= set.device_silent.params.minutes && !alreadySilent) {
+        // Causa probable con el último reporte de salud y el historial (F06-P02).
+        const diagnosis = await diagnoseTrip(system, trip.id, now);
+        const base = lastReport
+          ? `El celular de ${tripName(trip)} no envía su ubicación desde hace ${silentFor} min.`
+          : `El celular de ${tripName(trip)} no ha enviado su ubicación desde que inició el viaje (${silentFor} min).`;
         const opened = await open(
           {
             ...tripFields(trip),
             type: 'device_silent',
-            cause: lastReport
-              ? `El celular de ${tripName(trip)} no envía su ubicación desde hace ${silentFor} min.`
-              : `El celular de ${tripName(trip)} no ha enviado su ubicación desde que inició el viaje (${silentFor} min).`,
-            suggestedAction: 'Llama al chofer y revisa la batería y los datos del celular.',
-            lat: live?.lat ?? null,
-            lng: live?.lng ?? null,
-            data: { silentMinutes: silentFor, lastReportAt: lastReport?.toISOString() ?? null },
+            cause: diagnosis ? `${base} Causa probable: ${diagnosis.message}` : base,
+            suggestedAction:
+              diagnosis && diagnosis.cause !== 'unknown'
+                ? diagnosis.suggestedAction
+                : 'Llama al chofer y revisa la batería y los datos del celular.',
+            lat: live?.lat ?? diagnosis?.lastPosition?.lat ?? null,
+            lng: live?.lng ?? diagnosis?.lastPosition?.lng ?? null,
+            data: {
+              silentMinutes: silentFor,
+              lastReportAt: lastReport?.toISOString() ?? null,
+              probableCause: diagnosis?.cause ?? null,
+            },
           },
           set,
         );

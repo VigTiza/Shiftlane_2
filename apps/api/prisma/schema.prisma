@@ -55,6 +55,7 @@ model Tenant {
   alertRules          AlertRule[]
   alerts              Alert[]
   alertActions        AlertAction[]
+  deviceHealthReports DeviceHealthReport[]
   driverPins          DriverPin[]
   driverEnrollments   DriverEnrollment[]
   devices             Device[]
@@ -484,10 +485,11 @@ model Device {
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  drivers    DriverDevice[]
-  sessions   Session[]
-  syncEvents DeviceSyncEvent[]
+  tenant        Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  drivers       DriverDevice[]
+  sessions      Session[]
+  syncEvents    DeviceSyncEvent[]
+  healthReports DeviceHealthReport[]
 
   @@unique([id, tenantId])
   @@index([tenantId])
@@ -1747,4 +1749,51 @@ model AlertAction {
 
   @@index([alertId])
   @@map("alert_actions")
+}
+
+// ---------------------------------------------------------------------------
+// Salud del celular (F06-P02)
+// ---------------------------------------------------------------------------
+
+/// Reporte de salud del celular del chofer: permisos, batería, señal, versión y hora.
+model DeviceHealthReport {
+  id                         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                   String   @map("tenant_id") @db.Uuid
+  deviceId                   String   @map("device_id") @db.Uuid
+  driverId                   String?  @map("driver_id") @db.Uuid
+  tripId                     String?  @map("trip_id") @db.Uuid
+  /// Hora corregida con el desfase del reloj del celular.
+  recordedAt                 DateTime @map("recorded_at") @db.Timestamptz(3)
+  receivedAt                 DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
+  batteryPct                 Int?     @map("battery_pct")
+  charging                   Boolean?
+  /// wifi, cellular o none.
+  networkType                String?  @map("network_type")
+  /// 0 (sin señal) a 4.
+  signalLevel                Int?     @map("signal_level")
+  mobileDataEnabled          Boolean? @map("mobile_data_enabled")
+  /// always, while_in_use o denied.
+  locationPermission         String?  @map("location_permission")
+  gpsEnabled                 Boolean? @map("gps_enabled")
+  backgroundAllowed          Boolean? @map("background_allowed")
+  /// true: la app está fuera del ahorro de batería (lo correcto).
+  batteryOptimizationIgnored Boolean? @map("battery_optimization_ignored")
+  cameraPermission           Boolean? @map("camera_permission")
+  appVersion                 String?  @map("app_version")
+  osVersion                  String?  @map("os_version")
+  platform                   String?
+  deviceModel                String?  @map("device_model")
+  /// Hora del servidor menos hora del celular al enviar.
+  clockOffsetMs              Int?     @map("clock_offset_ms")
+  /// ok, warning o problem.
+  status                     String
+  /// [{ code, severity, message }]
+  issues                     Json     @default("[]")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  device Device @relation(fields: [deviceId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@index([deviceId, recordedAt])
+  @@index([driverId, recordedAt])
+  @@map("device_health_reports")
 }

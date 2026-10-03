@@ -66,6 +66,7 @@ import { syncRoutes } from './modules/sync/routes.ts';
 import { tripRoutes } from './modules/trips/routes.ts';
 import { createAlertEngine } from './modules/alerts/engine.ts';
 import { alertRoutes } from './modules/alerts/routes.ts';
+import { deviceRoutes } from './modules/devices/routes.ts';
 import { createRoutesService } from './modules/routes/service.ts';
 import { createRealtime } from './realtime/server.ts';
 import { scheduleRoutes } from './modules/schedule/routes.ts';
@@ -335,6 +336,7 @@ export async function buildApp({ env, db, mailer, storage, routing, liveStore }:
   await app.register(tripRoutes);
   await app.register(syncRoutes);
   await app.register(alertRoutes);
+  await app.register(deviceRoutes);
 
   return app;
 }

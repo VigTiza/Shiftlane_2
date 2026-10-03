@@ -232,6 +232,10 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 | POST | /alerts/:id/acknowledge, /resolve, /notes | `alerts.manage` o `dispatch.operate` | Atender, resolver (con lo que se hizo) o anotar |
 | GET | /alert-rules | `settings.manage` o `alerts.manage` | Reglas de la empresa con valores por omisión |
 | PUT | /alert-rules/:type | `settings.manage` | Activa, gravedad, umbrales, escalamiento y aviso a la planta |
+| POST | /driver/health | chofer | Reportes de salud del celular; responde qué impide iniciar un viaje |
+| GET | /devices/health | `monitoring.view`, `dispatch.operate` o `alerts.manage` | Inventario de celulares con su último reporte |
+| GET | /devices/:id/health?limit= | igual | Historial de salud de un celular |
+| GET | /trips/:id/diagnosis | igual | Causa probable de que la unidad dejó de reportar |
 | GET | /trips/:id | `schedule.read`, `monitoring.view`, `plant.evidence` o `plant.dashboard` | Detalle con evidencia: historial, checklist, abordajes, incidentes, fotos |
 | GET | /trips/:id/photos/:photoId | igual que el detalle | Foto del viaje |
 | POST | /trips/:id/checklist-exception | `dispatch.operate` | Autoriza salir con el checklist sin aprobar |
@@ -348,6 +352,18 @@ desaparece (`autoResolved`). Estados: `open` → `acknowledged` → `resolved`, 
 `minutesToAcknowledge` y `minutesToResolve`. Si nadie la atiende en `escalateAfterMinutes`,
 se escala al gerente (`escalatedAt`). Se envían en tiempo real como `alert.created` y
 `alert.updated`.
+
+Salud del celular: cada reporte trae permisos (ubicación «siempre», GPS, segundo plano,
+cámara), batería y carga, red y señal, ahorro de batería, versión de la app y la hora (el
+desfase se calcula con `sentAt`). Impiden iniciar (`problem`): permiso de ubicación distinto
+de «siempre», GPS apagado, sin segundo plano, ahorro de batería activo, batería < 10 % sin
+cargar, sin cámara y versión menor que `MIN_DRIVER_APP_VERSION`. Solo avisan (`warning`):
+batería < 20 %, sin datos y hora desfasada más de 2 min. Cuando cambia el estado se envía
+`device.health_changed`. Diagnóstico de una unidad sin reportar, en orden: permiso revocado,
+batería (último reporte ≤ 10 % o la tendencia la proyecta agotada), zona sin señal conocida
+(2 o más huecos de más de 3 min de otras unidades a 300 m en 60 días), sin datos, app
+cerrada (también dejaron de llegar los reportes de salud) o sin causa clara. La alerta de
+unidad sin reportar incluye esta causa y su acción sugerida.
 
 Credencial QR del pasajero: `SL1.<datos en base64url>.<firma Ed25519>`; los datos llevan
 credencial, pasajero, empresa y un valor aleatorio que cambia al reemitirla.
