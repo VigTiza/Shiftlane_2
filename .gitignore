@@ -1,0 +1,53 @@
+# Dependencias
+node_modules/
+.pnpm-store/
+
+# Variables de entorno (solo se versiona .env.example)
+.env
+.env.*
+!.env.example
+
+# Compilados, cachés y reportes
+dist/
+build/
+coverage/
+.vite/
+*.tsbuildinfo
+test-results/
+playwright-report/
+blob-report/
+
+# Registros
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Flutter / Dart (apps/driver)
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+*.iml
+**/android/local.properties
+**/android/key.properties
+*.jks
+*.keystore
+
+# Python (scripts de infra y de Blender)
+__pycache__/
+*.pyc
+.venv/
+
+# Blender: respaldos automáticos
+*.blend1
+*.blend2
+
+# Word: archivos de bloqueo
+~$*
+
+# Editores y sistema operativo
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db

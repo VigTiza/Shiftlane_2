@@ -1,0 +1,7 @@
+# apps/driver es Flutter y no forma parte del workspace de pnpm.
+packages:
+  - apps/api
+  - apps/web
+  - apps/rider
+  - apps/landing
+  - packages/*

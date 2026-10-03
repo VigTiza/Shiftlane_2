@@ -1,0 +1,15 @@
+{
+  "name": "shiftlane",
+  "version": "0.0.0",
+  "private": true,
+  "description": "SaaS para empresas de transporte de personal en México",
+  "packageManager": "pnpm@12.8.1",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "docs:referencia": "python infra/scripts/docx-a-markdown.py",
+    "docs:verificar": "python infra/scripts/docx-a-markdown.py --verificar",
+    "test": "pnpm run docs:verificar"
+  }
+}
