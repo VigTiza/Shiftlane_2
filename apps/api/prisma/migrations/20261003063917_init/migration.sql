@@ -435,7 +435,14 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO shiftlane_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO shiftlane_app;
 
-REVOKE ALL ON TABLE "_prisma_migrations" FROM shiftlane_app;
+-- La base sombra de `prisma migrate dev` no tiene la tabla de migraciones.
+DO $$
+BEGIN
+  IF to_regclass('public._prisma_migrations') IS NOT NULL THEN
+    REVOKE ALL ON TABLE "_prisma_migrations" FROM shiftlane_app;
+  END IF;
+END
+$$;
 REVOKE INSERT, UPDATE, DELETE ON TABLE spatial_ref_sys FROM shiftlane_app;
 -- La bitácora es inmutable y el catálogo de roles y las cuentas los administra la plataforma.
 REVOKE UPDATE, DELETE ON TABLE "audit_log" FROM shiftlane_app;

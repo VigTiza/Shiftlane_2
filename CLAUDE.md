@@ -92,6 +92,8 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
   versiona). `app.db.app` respeta RLS y siempre se usa dentro de
   `withDbContext(db.app, { tenantId, clientOrgId, userId }, (tx) => ...)`. `app.db.system`
   se salta RLS: solo autenticación, tareas programadas y consola de plataforma.
+- Autenticación (docs/decisiones/0004): `preHandler: requireAuth(app, { kinds, roles })`
+  y `authOf(request, 'user')` para leer la sesión; `dbContextOf(auth)` da el contexto de BD.
 - Tabla nueva = `tenant_id` + `ENABLE ROW LEVEL SECURITY` + políticas `TO shiftlane_app` en
   la misma migración (la prueba test/security/tenant-isolation.test.ts lo exige).
 - Migración nueva: editar prisma/schema.prisma, `pnpm --filter @shiftlane/api db:migrate:new`,

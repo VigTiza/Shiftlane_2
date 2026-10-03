@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 
 import { createDatabase } from '../src/lib/db.ts';
 import type { DbClient } from '../src/lib/db.ts';
+import { hashSecret } from '../src/modules/auth/passwords.ts';
 
 export const SEED = {
   tenants: {
@@ -22,6 +23,7 @@ export const SEED = {
       address: 'Parque Industrial Antonio J. Bermúdez, Ciudad Juárez, Chih.',
       lat: 31.7256,
       lng: -106.4136,
+      activationCode: 'ALFANORTE',
     },
     betaSalvarcar: {
       id: '00000000-0000-4000-8000-000000000202',
@@ -29,6 +31,7 @@ export const SEED = {
       address: 'Parque Industrial Salvárcar, Ciudad Juárez, Chih.',
       lat: 31.647,
       lng: -106.3735,
+      activationCode: 'BETASALV',
     },
   },
   users: {
@@ -51,11 +54,44 @@ export const SEED = {
     betaHr: { id: '00000000-0000-4000-8000-000000000305', email: 'rh@electronica-beta.example' },
     platformAdmin: { id: '00000000-0000-4000-8000-000000000306', email: 'admin@shiftlane.example' },
   },
+  drivers: {
+    norteJuan: {
+      id: '00000000-0000-4000-8000-000000000401',
+      fullName: 'Juan Hernández',
+      employeeNumber: 'CH-001',
+    },
+    norteMaria: {
+      id: '00000000-0000-4000-8000-000000000402',
+      fullName: 'María Gómez',
+      employeeNumber: 'CH-002',
+    },
+  },
+  passengers: [
+    {
+      id: '00000000-0000-4000-8000-000000000501',
+      employeeNumber: 'A-1001',
+      fullName: 'Rosa Martínez',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000502',
+      employeeNumber: 'A-1002',
+      fullName: 'Luis Chávez',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000503',
+      employeeNumber: 'A-1003',
+      fullName: 'Karla Reyes',
+    },
+  ],
 } as const;
 
-/** Siembra los datos con un cliente que se salta la seguridad por filas (db.system). */
-export async function seed(db: DbClient): Promise<void> {
-  const { tenants, clientOrgs, plants, users } = SEED;
+/**
+ * Siembra los datos con un cliente que se salta la seguridad por filas (db.system).
+ * Si se pasa `userPassword`, los usuarios de ejemplo pueden iniciar sesión con ella.
+ */
+export async function seed(db: DbClient, options: { userPassword?: string } = {}): Promise<void> {
+  const { tenants, clientOrgs, plants, users, drivers, passengers } = SEED;
+  const passwordHash = options.userPassword ? await hashSecret(options.userPassword) : null;
 
   for (const tenant of Object.values(tenants)) {
     await db.tenant.upsert({ where: { id: tenant.id }, update: {}, create: tenant });
@@ -81,7 +117,13 @@ export async function seed(db: DbClient): Promise<void> {
     await db.plant.upsert({
       where: { id: plant.id },
       update: {},
-      create: { id: plant.id, name: plant.name, address: plant.address, clientOrgId },
+      create: {
+        id: plant.id,
+        name: plant.name,
+        address: plant.address,
+        clientOrgId,
+        passengerActivationCode: plant.activationCode,
+      },
     });
     await db.$executeRaw`
       UPDATE plants SET location = ST_SetSRID(ST_MakePoint(${plant.lng}, ${plant.lat}), 4326)::geography
@@ -146,12 +188,32 @@ export async function seed(db: DbClient): Promise<void> {
     },
   ] as const;
   for (const { role, ...person } of people) {
-    await db.user.upsert({ where: { id: person.id }, update: {}, create: person });
+    await db.user.upsert({
+      where: { id: person.id },
+      update: passwordHash ? { passwordHash } : {},
+      create: { ...person, passwordHash },
+    });
     const roleRow = await db.role.findUniqueOrThrow({ where: { key: role } });
     await db.userRole.upsert({
       where: { userId_roleId: { userId: person.id, roleId: roleRow.id } },
       update: {},
       create: { userId: person.id, roleId: roleRow.id },
+    });
+  }
+
+  for (const driver of Object.values(drivers)) {
+    await db.driver.upsert({
+      where: { id: driver.id },
+      update: {},
+      create: { ...driver, tenantId: tenants.norte.id },
+    });
+  }
+
+  for (const passenger of passengers) {
+    await db.passenger.upsert({
+      where: { id: passenger.id },
+      update: {},
+      create: { ...passenger, clientOrgId: clientOrgs.alfa.id, plantId: plants.alfaNorte.id },
     });
   }
 }
@@ -162,8 +224,14 @@ if (import.meta.main) {
   if (!url) throw new Error('Falta DATABASE_URL para sembrar los datos de ejemplo.');
   const database = createDatabase(url);
   try {
-    await seed(database.system);
-    console.log('Datos de ejemplo listos: 2 transportistas, 2 plantas, 6 usuarios.');
+    const userPassword = process.env.SEED_USER_PASSWORD;
+    await seed(database.system, userPassword ? { userPassword } : {});
+    console.log(
+      'Datos de ejemplo listos: 2 transportistas, 2 plantas, 6 usuarios, 2 choferes y 3 pasajeros.' +
+        (userPassword
+          ? ' Los usuarios entran con SEED_USER_PASSWORD.'
+          : ' Usuarios sin contraseña (define SEED_USER_PASSWORD).'),
+    );
   } finally {
     await database.close();
   }

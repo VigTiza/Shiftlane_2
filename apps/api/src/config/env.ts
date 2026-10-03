@@ -24,6 +24,27 @@ const envSchema = z.object({
   TRUST_PROXY: booleanFromEnv.default(false),
   /** Documentación OpenAPI interactiva en /docs. */
   API_DOCS_ENABLED: booleanFromEnv.default(true),
+
+  /** Secreto para firmar los tokens de acceso (HS256). Mínimo 32 caracteres. */
+  JWT_SECRET: z.string().min(32),
+  /** Llave AES-256 en base64 (32 bytes) para cifrar datos sensibles, como los secretos TOTP. */
+  ENCRYPTION_KEY: z.string().refine((value) => Buffer.from(value, 'base64').length === 32, {
+    message: 'Debe ser una llave de 32 bytes codificada en base64.',
+  }),
+  ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(900),
+  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
+  DRIVER_REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(90),
+  PASSENGER_REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(180),
+  /** Cookie del token de renovación solo por HTTPS. Por omisión, activa en producción. */
+  COOKIE_SECURE: booleanFromEnv.optional(),
+  /** Peticiones por minuto e IP en los endpoints de inicio de sesión y activación. */
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+
+  /** URL del panel web, para los enlaces de los correos. */
+  APP_URL: z.url().default('http://localhost:5173'),
+  /** Servidor de correo (smtp://...). Sin él, los correos solo se escriben en el registro. */
+  SMTP_URL: z.url().optional(),
+  MAIL_FROM: z.string().default('Shiftlane <no-responder@shiftlane.mx>'),
 });
 
 export type Env = z.infer<typeof envSchema>;

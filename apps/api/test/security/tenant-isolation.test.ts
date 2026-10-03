@@ -34,16 +34,25 @@ afterAll(async () => {
 });
 
 describe('configuración de seguridad por filas', () => {
-  it('toda tabla de la aplicación tiene RLS activa y al menos una política', async () => {
+  it('toda tabla de la aplicación tiene RLS activa y políticas para el rol de la API', async () => {
+    // Tablas que solo usa el sistema (db.system): RLS activa y ninguna política = acceso denegado.
+    const SYSTEM_ONLY = ['password_reset_tokens'];
     const tables = await db.system.$queryRaw<{ table: string; rls: boolean; policies: number }[]>`
       SELECT c.relname AS table, c.relrowsecurity AS rls,
              (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
       WHERE n.nspname = 'public' AND c.relkind = 'r'
         AND c.relname NOT IN ('_prisma_migrations', 'spatial_ref_sys')`;
-    expect(tables.length).toBeGreaterThanOrEqual(9);
-    const unprotected = tables.filter((t) => !t.rls || t.policies === 0).map((t) => t.table);
-    expect(unprotected).toEqual([]);
+    expect(tables.length).toBeGreaterThanOrEqual(16);
+    expect(tables.filter((t) => !t.rls).map((t) => t.table)).toEqual([]);
+    const withoutPolicies = tables.filter((t) => t.policies === 0).map((t) => t.table);
+    expect(withoutPolicies.sort()).toEqual(SYSTEM_ONLY);
+  });
+
+  it('el rol de la API no tiene acceso a las tablas solo del sistema', async () => {
+    await expect(as(NORTE, (tx) => tx.passwordResetToken.findMany())).rejects.toThrow(
+      PERMISSION_ERROR,
+    );
   });
 
   it('el rol de la API no puede saltarse la seguridad por filas', async () => {
@@ -333,5 +342,50 @@ describe('bitácora de auditoría', () => {
 
     const juarezLog = await as(JUAREZ, (tx) => tx.auditLog.findMany());
     expect(juarezLog.map((log) => log.id)).not.toContain(entry.id);
+  });
+});
+
+describe('choferes, celulares y pasajeros', () => {
+  it('una transportista no ve los choferes ni celulares de otra', async () => {
+    const juarezDriver = await db.system.driver.create({
+      data: { tenantId: tenants.juarez.id, fullName: 'Chofer de Rutas Juárez' },
+    });
+    await db.system.device.create({ data: { tenantId: tenants.juarez.id, secretHash: 'x' } });
+
+    const norteDrivers = await as(NORTE, (tx) => tx.driver.findMany());
+    expect(norteDrivers.map((d) => d.id)).not.toContain(juarezDriver.id);
+    expect(
+      (await as(NORTE, (tx) => tx.device.findMany())).every((d) => d.tenantId === tenants.norte.id),
+    ).toBe(true);
+
+    await expect(
+      as(NORTE, (tx) =>
+        tx.driver.create({ data: { tenantId: tenants.juarez.id, fullName: 'Intruso' } }),
+      ),
+    ).rejects.toThrow(RLS_ERROR);
+  });
+
+  it('la planta administra su lista de pasajeros y la transportista con acuerdo solo la lee', async () => {
+    const created = await as(ALFA, (tx) =>
+      tx.passenger.create({
+        data: {
+          clientOrgId: clientOrgs.alfa.id,
+          plantId: plants.alfaNorte.id,
+          employeeNumber: `A-${randomUUID().slice(0, 6)}`,
+          fullName: 'Empleada de Alfa',
+        },
+      }),
+    );
+
+    const norteSees = await as(NORTE, (tx) => tx.passenger.findMany());
+    expect(norteSees.map((p) => p.id)).toContain(created.id);
+
+    const changed = await as(NORTE, (tx) =>
+      tx.passenger.updateMany({ where: { id: created.id }, data: { fullName: 'Cambiado' } }),
+    );
+    expect(changed.count).toBe(0);
+
+    const betaSees = await as(BETA, (tx) => tx.passenger.findMany());
+    expect(betaSees.map((p) => p.id)).not.toContain(created.id);
   });
 });

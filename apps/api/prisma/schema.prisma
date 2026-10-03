@@ -42,6 +42,11 @@ model Tenant {
   auditLogs         AuditLog[]
   serviceAgreements ServiceAgreement[]
   createdClientOrgs ClientOrg[]        @relation("ClientOrgCreatedBy")
+  drivers           Driver[]
+  driverPins        DriverPin[]
+  driverEnrollments DriverEnrollment[]
+  devices           Device[]
+  driverDevices     DriverDevice[]
 
   @@map("tenants")
 }
@@ -70,14 +75,25 @@ model User {
   passwordHash String?    @map("password_hash")
   status       UserStatus @default(active)
   lastLoginAt  DateTime?  @map("last_login_at") @db.Timestamptz(3)
-  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt    DateTime?  @map("deleted_at") @db.Timestamptz(3)
 
-  tenant    Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  clientOrg ClientOrg? @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
-  roles     UserRole[]
-  sessions  Session[]
+  passwordChangedAt DateTime? @map("password_changed_at") @db.Timestamptz(3)
+  /// Intentos fallidos seguidos; al llegar al límite la cuenta se bloquea un tiempo.
+  failedLoginCount  Int       @default(0) @map("failed_login_count")
+  lockedUntil       DateTime? @map("locked_until") @db.Timestamptz(3)
+  /// Secreto TOTP cifrado (AES-256-GCM). La 2FA está activa si totpEnabledAt no es nulo.
+  totpSecret        String?   @map("totp_secret")
+  totpEnabledAt     DateTime? @map("totp_enabled_at") @db.Timestamptz(3)
+  /// Último paso TOTP aceptado, para que un código no se use dos veces.
+  totpLastStep      Int?      @map("totp_last_step")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  tenant              Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  clientOrg           ClientOrg?           @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
+  roles               UserRole[]
+  sessions            Session[]
+  passwordResetTokens PasswordResetToken[]
 
   @@index([tenantId])
   @@index([clientOrgId])
@@ -126,30 +142,61 @@ model UserRole {
   @@map("user_roles")
 }
 
-/// Sesión de un usuario web: guarda el hash del token de renovación (rotativo).
-model Session {
-  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId           String    @map("user_id") @db.Uuid
-  tenantId         String?   @map("tenant_id") @db.Uuid
-  clientOrgId      String?   @map("client_org_id") @db.Uuid
-  /// Todas las rotaciones de un mismo inicio de sesión comparten familia.
-  familyId         String    @map("family_id") @db.Uuid
-  refreshTokenHash String    @unique @map("refresh_token_hash")
-  userAgent        String?   @map("user_agent")
-  ip               String?
-  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
-  rotatedAt        DateTime? @map("rotated_at") @db.Timestamptz(3)
-  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+/// Quién inició la sesión.
+enum SessionPrincipal {
+  user
+  driver
+  passenger
+}
 
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+/// Sesión de usuario web, chofer o pasajero: guarda el hash del token de renovación (rotativo).
+model Session {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  principal        SessionPrincipal
+  userId           String?          @map("user_id") @db.Uuid
+  driverId         String?          @map("driver_id") @db.Uuid
+  passengerId      String?          @map("passenger_id") @db.Uuid
+  deviceId         String?          @map("device_id") @db.Uuid
+  tenantId         String?          @map("tenant_id") @db.Uuid
+  clientOrgId      String?          @map("client_org_id") @db.Uuid
+  /// Todas las rotaciones de un mismo inicio de sesión comparten familia.
+  familyId         String           @map("family_id") @db.Uuid
+  refreshTokenHash String           @unique @map("refresh_token_hash")
+  userAgent        String?          @map("user_agent")
+  ip               String?
+  expiresAt        DateTime         @map("expires_at") @db.Timestamptz(3)
+  rotatedAt        DateTime?        @map("rotated_at") @db.Timestamptz(3)
+  revokedAt        DateTime?        @map("revoked_at") @db.Timestamptz(3)
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  driver    Driver?    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  passenger Passenger? @relation(fields: [passengerId], references: [id], onDelete: Cascade)
+  device    Device?    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   tenant    Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   clientOrg ClientOrg? @relation(fields: [clientOrgId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([driverId])
+  @@index([passengerId])
   @@index([familyId])
   @@map("sessions")
+}
+
+/// Token de un solo uso para restablecer la contraseña (solo se guarda su hash).
+model PasswordResetToken {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 /// Bitácora inmutable de cambios (quién, qué, antes y después).
@@ -201,25 +248,29 @@ model ClientOrg {
   sessions          Session[]
   auditLogs         AuditLog[]
   serviceAgreements ServiceAgreement[]
+  passengers        Passenger[]
 
   @@index([createdByTenantId])
   @@map("client_orgs")
 }
 
 model Plant {
-  id          String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  clientOrgId String                                 @map("client_org_id") @db.Uuid
-  name        String
-  address     String?
+  id                      String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientOrgId             String                                 @map("client_org_id") @db.Uuid
+  name                    String
+  address                 String?
   /// Ubicación de la planta (PostGIS). Se lee y escribe con SQL.
-  location    Unsupported("geography(Point, 4326)")?
-  timezone    String                                 @default("America/Ciudad_Juarez")
-  createdAt   DateTime                               @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime                               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt   DateTime?                              @map("deleted_at") @db.Timestamptz(3)
+  location                Unsupported("geography(Point, 4326)")?
+  timezone                String                                 @default("America/Ciudad_Juarez")
+  /// Código que la planta comparte con sus empleados para activar la app del pasajero.
+  passengerActivationCode String?                                @unique @map("passenger_activation_code")
+  createdAt               DateTime                               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime                               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt               DateTime?                              @map("deleted_at") @db.Timestamptz(3)
 
   clientOrg         ClientOrg          @relation(fields: [clientOrgId], references: [id])
   serviceAgreements ServiceAgreement[]
+  passengers        Passenger[]
 
   @@unique([id, clientOrgId])
   @@index([clientOrgId])
@@ -255,4 +306,143 @@ model ServiceAgreement {
   @@index([clientOrgId])
   @@index([plantId])
   @@map("service_agreements")
+}
+
+// ---------------------------------------------------------------------------
+// Choferes y celulares (acceso a la app del chofer). F02-P01 completa el catálogo.
+// ---------------------------------------------------------------------------
+
+enum DriverStatus {
+  active
+  inactive
+}
+
+model Driver {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String       @map("tenant_id") @db.Uuid
+  fullName       String       @map("full_name")
+  employeeNumber String?      @map("employee_number")
+  phone          String?
+  status         DriverStatus @default(active)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime?    @map("deleted_at") @db.Timestamptz(3)
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  pin         DriverPin?
+  enrollments DriverEnrollment[]
+  devices     DriverDevice[]
+  sessions    Session[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, employeeNumber])
+  @@index([tenantId])
+  @@map("drivers")
+}
+
+/// PIN de 4 dígitos del chofer (hash argon2id). Sin pinHash, el chofer debe crear uno nuevo.
+model DriverPin {
+  driverId       String    @id @map("driver_id") @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  pinHash        String?   @map("pin_hash")
+  failedAttempts Int       @default(0) @map("failed_attempts")
+  lockedUntil    DateTime? @map("locked_until") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  driver Driver @relation(fields: [driverId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([driverId, tenantId])
+  @@index([tenantId])
+  @@map("driver_pins")
+}
+
+/// Código QR de un solo uso para vincular a un chofer con un celular.
+model DriverEnrollment {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  driverId        String    @map("driver_id") @db.Uuid
+  codeHash        String    @unique @map("code_hash")
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt          DateTime? @map("used_at") @db.Timestamptz(3)
+  createdByUserId String?   @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  driver Driver @relation(fields: [driverId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([driverId])
+  @@map("driver_enrollments")
+}
+
+/// Celular registrado. Se autentica con un secreto que solo conoce la app (se guarda su hash).
+model Device {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  secretHash String    @map("secret_hash")
+  platform   String?
+  model      String?
+  appVersion String?   @map("app_version")
+  lastSeenAt DateTime? @map("last_seen_at") @db.Timestamptz(3)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  drivers  DriverDevice[]
+  sessions Session[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId])
+  @@map("devices")
+}
+
+/// Choferes vinculados a un celular (un celular puede ser compartido entre turnos).
+model DriverDevice {
+  driverId   String    @map("driver_id") @db.Uuid
+  deviceId   String    @map("device_id") @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  enrolledAt DateTime  @default(now()) @map("enrolled_at") @db.Timestamptz(3)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  driver Driver @relation(fields: [driverId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  device Device @relation(fields: [deviceId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@id([driverId, deviceId])
+  @@index([tenantId])
+  @@index([deviceId])
+  @@map("driver_devices")
+}
+
+// ---------------------------------------------------------------------------
+// Pasajeros (lista de empleados de la planta). F02-P03 completa el catálogo.
+// ---------------------------------------------------------------------------
+
+enum PassengerStatus {
+  active
+  inactive
+}
+
+model Passenger {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientOrgId    String          @map("client_org_id") @db.Uuid
+  plantId        String          @map("plant_id") @db.Uuid
+  employeeNumber String          @map("employee_number")
+  fullName       String          @map("full_name")
+  status         PassengerStatus @default(active)
+  activatedAt    DateTime?       @map("activated_at") @db.Timestamptz(3)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime?       @map("deleted_at") @db.Timestamptz(3)
+
+  clientOrg ClientOrg @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
+  plant     Plant     @relation(fields: [plantId, clientOrgId], references: [id, clientOrgId], onDelete: Restrict)
+  sessions  Session[]
+
+  @@unique([clientOrgId, employeeNumber])
+  @@index([plantId])
+  @@map("passengers")
 }

@@ -2,8 +2,8 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F01 — Núcleo del backend
-- Último prompt completado: F01-P02
-- Siguiente prompt: F01-P03 Autenticación y sesiones
+- Último prompt completado: F01-P03
+- Siguiente prompt: F01-P04 Roles, permisos y auditoría
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -53,9 +53,35 @@
   compartidas, visibles por acuerdo de servicio. REVISAR CON EL USUARIO (fase crítica 01).
 - 2026-10-03 Prisma 7.10 con adaptador pg y cliente generado en TypeScript (compatible con
   ejecutar TS directo en Node). `prisma migrate reset` está bloqueado para agentes: usar
-  `migrate deploy` o recrear la base local a mano.
+  `migrate deploy` o recrear la base local a mano. `migrate dev` no funciona sin terminal
+  interactiva cuando hay advertencias: generar el SQL con `prisma migrate diff
+  --from-config-datasource --to-schema prisma/schema.prisma --script`.
+- 2026-10-03 Autenticación (docs/decisiones/0004): JWT de 15 min + token de renovación
+  rotativo con detección de reutilización; cookie httpOnly para web y pasajeros, cuerpo para
+  la app del chofer; PIN del chofer ligado al secreto del celular. REVISAR CON EL USUARIO.
 
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F01-P03 Autenticación y sesiones
+- Hecho: migración auth (bloqueo y 2FA en users, sesiones para usuario/chofer/pasajero,
+  password_reset_tokens, drivers, driver_pins, driver_enrollments, devices, driver_devices,
+  passengers, código de activación por planta) con RLS. Módulo auth: argon2id, JWT (jose),
+  TOTP propio (RFC 6238), cifrado AES-256-GCM, sesiones rotativas, login web con bloqueo,
+  2FA, recuperación por correo (Mailpit/registro), cierre de sesiones; choferes con QR de un
+  solo uso, PIN ligado a celular, celular compartido y restablecer PIN; activación de
+  pasajeros. Rutas /auth/* y /drivers/:id/{enrollment,pin-reset}. Datos de ejemplo con
+  choferes, pasajeros y contraseña de desarrollo (SEED_USER_PASSWORD en .env local).
+- Archivos principales: apps/api/src/modules/auth/*, src/modules/drivers/*, src/plugins/auth.ts,
+  src/lib/{crypto,mailer}.ts, prisma/migrations/*_auth, docs/decisiones/0004.
+- Pruebas agregadas / resultado: 49 pruebas nuevas (TOTP con vectores del RFC, cifrado,
+  argon2, login, enumeración, bloqueo, tokens alterados, rotación y reutilización, cierre de
+  sesiones, recuperación, 2FA con repetición de código, límite por IP, QR de un solo uso,
+  QR vencido, PIN, bloqueo de PIN, celular compartido, restablecer PIN, permisos de
+  despachador, pasajeros) y aislamiento de las tablas nuevas. 89 pruebas de la API en verde.
+- Problemas encontrados y cómo se resolvieron: base sombra sin _prisma_migrations (REVOKE
+  condicional en la migración inicial y base local recreada); `migrate dev` no interactivo
+  (SQL con migrate diff); cuerpo nulo en /auth/refresh (nullish); 204 con z.null().
+- Pendiente para después: permisos por acción (F01-P04); QR de RH para pasajeros (F10).
+
 ### 2026-10-03 — F01-P02 Esquema de base de datos y seguridad por filas
 - Hecho: esquema Prisma con tenants, users, roles, user_roles, sessions, audit_log,
   client_orgs, plants (ubicación PostGIS) y service_agreements; todas con created_at,

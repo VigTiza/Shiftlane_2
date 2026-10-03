@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
@@ -15,16 +16,29 @@ import {
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 
 import type { Env } from './config/env.ts';
+import { createCipher } from './lib/crypto.ts';
 import { createDatabase } from './lib/db.ts';
 import type { Database } from './lib/db.ts';
 import { AppError } from './lib/errors.ts';
+import { createLogMailer, createSmtpMailer } from './lib/mailer.ts';
+import type { Mailer } from './lib/mailer.ts';
+import { createDriverAuthService } from './modules/auth/driver-service.ts';
+import { createPassengerAuthService } from './modules/auth/passenger-service.ts';
+import { authRoutes } from './modules/auth/routes.ts';
+import { createAuthService } from './modules/auth/service.ts';
+import { createSessionService } from './modules/auth/sessions.ts';
+import { createTokenService } from './modules/auth/tokens.ts';
+import { driverRoutes } from './modules/drivers/routes.ts';
 import { healthRoutes } from './modules/health/routes.ts';
+import { authPlugin } from './plugins/auth.ts';
 import { errorHandlerPlugin } from './plugins/error-handler.ts';
 
 export interface BuildAppOptions {
   env: Env;
   /** Conexión ya creada; si no se pasa, la app crea una y la cierra al terminar. */
   db?: Database;
+  /** Envío de correo; por omisión SMTP si hay SMTP_URL, si no solo se registra. */
+  mailer?: Mailer;
 }
 
 function loggerOptions(env: Env): FastifyServerOptions['logger'] {
@@ -37,7 +51,7 @@ function loggerOptions(env: Env): FastifyServerOptions['logger'] {
   };
 }
 
-export async function buildApp({ env, db }: BuildAppOptions) {
+export async function buildApp({ env, db, mailer }: BuildAppOptions) {
   const app = Fastify({
     logger: loggerOptions(env),
     trustProxy: env.TRUST_PROXY,
@@ -55,6 +69,32 @@ export async function buildApp({ env, db }: BuildAppOptions) {
     app.addHook('onClose', async () => database.close());
   }
 
+  const tokens = createTokenService({
+    secret: env.JWT_SECRET,
+    accessTtlSeconds: env.ACCESS_TOKEN_TTL_SECONDS,
+  });
+  const cipher = createCipher(env.ENCRYPTION_KEY);
+  const mail =
+    mailer ??
+    (env.SMTP_URL ? createSmtpMailer(env.SMTP_URL, env.MAIL_FROM) : createLogMailer(app.log));
+  const sessions = createSessionService({
+    db: database.system,
+    ttlDays: {
+      user: env.REFRESH_TOKEN_TTL_DAYS,
+      driver: env.DRIVER_REFRESH_TOKEN_TTL_DAYS,
+      passenger: env.PASSENGER_REFRESH_TOKEN_TTL_DAYS,
+    },
+  });
+  const authDeps = { db: database.system, sessions, tokens };
+  app.decorate('tokens', tokens);
+  app.decorate('cipher', cipher);
+  app.decorate('mailer', mail);
+  app.decorate('authServices', {
+    auth: createAuthService({ ...authDeps, cipher, mailer: mail, appUrl: env.APP_URL }),
+    drivers: createDriverAuthService(authDeps),
+    passengers: createPassengerAuthService(authDeps),
+  });
+
   app.addHook('onSend', async (request, reply) => {
     void reply.header('x-request-id', request.id);
   });
@@ -62,6 +102,8 @@ export async function buildApp({ env, db }: BuildAppOptions) {
   await app.register(errorHandlerPlugin);
   await app.register(helmet);
   await app.register(cors, { origin: env.CORS_ORIGINS, credentials: true });
+  await app.register(cookie);
+  await app.register(authPlugin);
   await app.register(rateLimit, {
     max: env.RATE_LIMIT_MAX,
     timeWindow: env.RATE_LIMIT_WINDOW_MS,
@@ -88,6 +130,8 @@ export async function buildApp({ env, db }: BuildAppOptions) {
   }
 
   await app.register(healthRoutes);
+  await app.register(authRoutes);
+  await app.register(driverRoutes);
 
   return app;
 }
