@@ -1,22 +1,95 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../application/auth/auth_controller.dart';
+import '../../application/auth/auth_providers.dart';
+import '../../domain/auth/auth_models.dart';
+import '../../presentation/screens/auth/auth_screens.dart';
 import '../../presentation/screens/home_screen.dart';
+import 'app_routes.dart';
 
-abstract final class AppRoutes {
-  static const home = '/';
+export 'app_routes.dart';
+
+/// A dónde debe ir el chofer según el estado del acceso (null: se queda).
+String? redirectFor(AuthState auth, String location) {
+  final inEnroll = location.startsWith(AppRoutes.enroll);
+  final inLogin = location.startsWith(AppRoutes.selectDriver);
+  return switch (auth) {
+    AuthLoading() => location == AppRoutes.loading ? null : AppRoutes.loading,
+    AuthNeedsEnrollment() => inEnroll ? null : AppRoutes.enroll,
+    AuthNeedsDriver() => inEnroll || inLogin ? null : AppRoutes.selectDriver,
+    AuthSignedIn() =>
+      inEnroll || inLogin || location == AppRoutes.loading
+          ? AppRoutes.home
+          : null,
+  };
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
+  final auth = ValueNotifier<AuthState>(ref.read(authControllerProvider));
+  ref.listen(authControllerProvider, (_, next) => auth.value = next);
+  final controller = ref.read(authControllerProvider.notifier);
+
   final router = GoRouter(
-    initialLocation: AppRoutes.home,
+    initialLocation: AppRoutes.loading,
+    refreshListenable: auth,
+    redirect: (context, state) =>
+        redirectFor(auth.value, state.matchedLocation),
     routes: [
+      GoRoute(
+        path: AppRoutes.loading,
+        builder: (context, state) => const SplashScreen(),
+      ),
       GoRoute(
         path: AppRoutes.home,
         builder: (context, state) => const HomeScreen(),
       ),
+      GoRoute(
+        path: AppRoutes.enroll,
+        builder: (context, state) => const EnrollScreen(),
+        routes: [
+          GoRoute(
+            path: 'pin',
+            builder: (context, state) {
+              final code = state.extra! as String;
+              return CreatePinScreen(
+                onSubmit: (pin) async {
+                  final outcome = await controller.enroll(code, pin: pin);
+                  return outcome is EnrollFailed ? outcome.message : null;
+                },
+              );
+            },
+          ),
+        ],
+      ),
+      GoRoute(
+        path: AppRoutes.selectDriver,
+        builder: (context, state) => const DriverSelectScreen(),
+        routes: [
+          GoRoute(
+            path: 'pin',
+            builder: (context, state) =>
+                PinScreen(driver: state.extra! as LinkedDriver),
+          ),
+          GoRoute(
+            path: 'nuevo-pin',
+            builder: (context, state) {
+              final driver = state.extra! as LinkedDriver;
+              return CreatePinScreen(
+                title: 'Crea tu PIN nuevo',
+                onSubmit: (pin) async =>
+                    pinError(await controller.createPin(driver, pin)),
+              );
+            },
+          ),
+        ],
+      ),
     ],
   );
-  ref.onDispose(router.dispose);
+  ref.onDispose(() {
+    router.dispose();
+    auth.dispose();
+  });
   return router;
 });

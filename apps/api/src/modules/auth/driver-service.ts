@@ -135,7 +135,8 @@ export function createDriverAuthService(deps: {
       }
       const hasPin = Boolean(driver.pin?.pinHash);
       if (!hasPin && !input.pin) {
-        throw new BadRequestError('Crea un PIN de 4 dígitos para entrar a la app.');
+        // Código propio para que la app pase directo a crear el PIN.
+        throw new AppError(400, 'PIN_REQUIRED', 'Crea un PIN de 4 dígitos para entrar a la app.');
       }
 
       // Celular compartido: si ya está registrado en la misma empresa, se reutiliza.

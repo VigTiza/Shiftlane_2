@@ -2,8 +2,8 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F07 — App del chofer (Flutter)
-- Último prompt completado: F07-P01 Proyecto Flutter y arquitectura
-- Siguiente prompt: F07-P02 Acceso con QR y PIN
+- Último prompt completado: F07-P02 Acceso con QR y PIN
+- Siguiente prompt: F07-P03 Revisión del celular antes del turno
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -166,7 +166,32 @@
   go_router, dio y drift. Ambientes con --dart-define-from-file (config/*.json sin secretos).
   Cola local (outbox_events) desde el inicio: todo evento pasa por ella con su UUID.
 
+- 2026-10-03 Acceso del chofer: el QR de alta trae `shiftlane-chofer://vincular?codigo=…`; si
+  es su primer celular la API responde PIN_REQUIRED (código nuevo en la API) y la app pide el
+  PIN antes de terminar. Credenciales del celular y refresh token en flutter_secure_storage;
+  la sesión se renueva al abrir (sin señal sigue adentro). La cámara está detrás de
+  qrScannerProvider para poder probar sin celular.
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F07-P02 Acceso con QR y PIN
+- Hecho: vinculación por QR (o código escrito) con creación del PIN al primer uso; elección
+  de chofer en celular compartido; PIN con teclado grande, errores del servidor en español,
+  PIN restablecido por el despachador; cambio de chofer; restauración de la sesión al abrir;
+  credenciales cifradas (flutter_secure_storage); rutas con redirección según el estado del
+  acceso; permisos de cámara e internet en Android. En la API, el error de PIN faltante tiene
+  código PIN_REQUIRED.
+- Archivos principales: apps/driver/lib/{domain,data,application}/auth/*,
+  lib/presentation/screens/auth/auth_screens.dart, lib/presentation/widgets/{pin_pad,
+  qr_scanner_view}.dart, lib/core/router/*, apps/api/src/modules/auth/driver-service.ts.
+- Pruebas agregadas / resultado: 11 nuevas en Flutter (código del QR, redirecciones, teclado,
+  flujo de primer celular, código ajeno, celular compartido con PIN incorrecto y cambio de
+  chofer, PIN restablecido, sesión renovada, sin señal y sesión revocada); 25 en total. API
+  sin cambios en el resultado (364).
+- Problemas encontrados y cómo se resolvieron: una URL de otra app pasaba como código escrito
+  (ahora solo letras, números y guiones); drift avisaba de bases sin cerrar en las pruebas.
+- Pendiente para después: renovar el token automáticamente al recibir 401 durante la
+  sincronización (F07-P05).
+
 ### 2026-10-03 — F07-P01 Proyecto Flutter y arquitectura
 - Hecho: apps/driver con capas core/data/domain/application/presentation; configuración de
   ambientes dev/staging/prod; registros con búfer para soporte; errores de la API traducidos

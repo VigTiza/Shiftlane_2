@@ -115,7 +115,10 @@ describe('alta del chofer con QR de un solo uso', () => {
       .post('/auth/driver/enroll')
       .send({ code })
       .expect(400);
-    expect(response.body.error.message).toBe('Crea un PIN de 4 dígitos para entrar a la app.');
+    expect(response.body.error).toMatchObject({
+      code: 'PIN_REQUIRED',
+      message: 'Crea un PIN de 4 dígitos para entrar a la app.',
+    });
     const badPin = await request(app.server)
       .post('/auth/driver/enroll')
       .send({ code, pin: '12' })

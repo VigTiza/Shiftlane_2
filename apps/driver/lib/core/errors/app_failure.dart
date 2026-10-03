@@ -27,9 +27,10 @@ class UnauthorizedFailure extends AppFailure {
 
 /// Datos inválidos (400): el servidor explica qué corregir.
 class ValidationFailure extends AppFailure {
-  const ValidationFailure(super.message, {this.details = const []});
+  const ValidationFailure(super.message, {this.details = const [], this.code});
 
   final List<String> details;
+  final String? code;
 }
 
 class NotFoundFailure extends AppFailure {
@@ -92,6 +93,7 @@ AppFailure failureFromDio(DioException error) {
         return ValidationFailure(
           body.message ?? 'Revisa los datos.',
           details: body.details,
+          code: body.code,
         );
       }
       if (status == 404) {

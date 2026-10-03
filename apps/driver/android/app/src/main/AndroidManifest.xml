@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- API de Shiftlane y lector de QR (alta del celular, gafetes y puerta de planta). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
     <application
         android:label="shiftlane_driver"
         android:name="${applicationName}"

@@ -1,30 +1,26 @@
-import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shiftlane_driver/app.dart';
-import 'package:shiftlane_driver/application/providers.dart';
-import 'package:shiftlane_driver/core/config/environment.dart';
-import 'package:shiftlane_driver/data/local/app_database.dart';
+import 'package:shiftlane_driver/domain/auth/auth_models.dart';
+
+import 'support/fakes.dart';
+
+InMemoryCredentialStore _signedInStore() => InMemoryCredentialStore()
+  ..device = const DeviceCredentials(
+    deviceId: 'device-1',
+    secret: 'secreto-del-celular-123456',
+  )
+  ..session = (driverId: 'd1', fullName: 'Juan Pérez', refreshToken: 'r');
 
 void main() {
   testWidgets('arranca en la pantalla principal con el ambiente visible', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          appConfigProvider.overrideWithValue(
-            AppConfig.fromValues(environment: 'staging'),
-          ),
-          appDatabaseProvider.overrideWithValue(
-            AppDatabase(NativeDatabase.memory()),
-          ),
-        ],
-        child: const ShiftlaneDriverApp(),
-      ),
+    await pumpApp(
+      tester,
+      store: _signedInStore(),
+      repository: FakeAuthRepository(),
+      environment: 'staging',
     );
-    await tester.pumpAndSettle();
 
     expect(find.text('Shiftlane Chofer'), findsOneWidget);
     expect(find.text('Pruebas'), findsOneWidget);
@@ -34,17 +30,23 @@ void main() {
   });
 
   testWidgets('en producción no se muestra el ambiente', (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          appConfigProvider.overrideWithValue(
-            AppConfig.fromValues(environment: 'prod'),
-          ),
-        ],
-        child: const ShiftlaneDriverApp(),
-      ),
+    await pumpApp(
+      tester,
+      store: _signedInStore(),
+      repository: FakeAuthRepository(),
+      environment: 'prod',
     );
-    await tester.pumpAndSettle();
     expect(find.byType(Chip), findsNothing);
+  });
+
+  testWidgets('sin vincular, abre la pantalla para escanear el QR', (
+    tester,
+  ) async {
+    await pumpApp(
+      tester,
+      store: InMemoryCredentialStore(),
+      repository: FakeAuthRepository(),
+    );
+    expect(find.text('Vincular celular'), findsOneWidget);
   });
 }
