@@ -31,6 +31,8 @@ ROOT = Path(__file__).resolve().parents[2]
 REF_DIR = ROOT / "docs" / "referencia"
 ORIGINALS_DIR = REF_DIR / "originales"
 INDEX_FILE = REF_DIR / "indice-de-prompts.md"
+SUMMARY_FILE = REF_DIR / "resumen.md"
+SUMMARY_MAX_LINES = 80
 LUA_FILTER = Path(__file__).with_suffix(".lua")
 
 DOCUMENTS = [
@@ -237,6 +239,12 @@ def verify() -> list[str]:
             errors.append(f"{p['code']} está dentro de la fase {p['phase'][0]}")
     if not INDEX_FILE.exists() or INDEX_FILE.read_text(encoding="utf-8") != render_index(prompts):
         errors.append("indice-de-prompts.md no coincide con el plan; vuelve a generarlo")
+
+    # El resumen se escribe a mano (F00-P02) y debe seguir siendo de consulta rápida.
+    if not SUMMARY_FILE.exists():
+        errors.append("Falta docs/referencia/resumen.md")
+    elif (lines := len(SUMMARY_FILE.read_text(encoding="utf-8").splitlines())) > SUMMARY_MAX_LINES:
+        errors.append(f"resumen.md tiene {lines} líneas; el máximo es {SUMMARY_MAX_LINES}")
 
     return errors
 

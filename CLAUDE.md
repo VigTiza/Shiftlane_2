@@ -5,6 +5,7 @@ SaaS para empresas de transporte de personal (México). Referencia funcional:
 docs/referencia/descripcion-funcional.md y docs/referencia/sistema-de-precios.md.
 Plan de trabajo (76 prompts en 23 fases): docs/referencia/plan-de-desarrollo.md.
 Índice para ubicar cada prompt (código, título, fase, línea): docs/referencia/indice-de-prompts.md.
+Resumen de consulta rápida (módulos, usuarios, reglas clave, precios): docs/referencia/resumen.md.
 
 ## Protocolo obligatorio
 1. Antes de trabajar, lee la sección ESTADO ACTUAL de docs/AVANCES.md.
@@ -65,7 +66,8 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
 - `pnpm test` — ejecuta todas las pruebas (por ahora, la verificación de documentos).
 - `pnpm docs:referencia` — regenera docs/referencia/*.md e indice-de-prompts.md a partir
   de los .docx de docs/referencia/originales/ (requiere pandoc).
-- `pnpm docs:verificar` — comprueba que los Markdown estén completos y el índice al día.
+- `pnpm docs:verificar` — comprueba que los Markdown estén completos, el índice al día y
+  el resumen dentro de 80 líneas.
 - Pendientes de F00-P03: dev (levantar entorno), lint, typecheck, db:migrate, db:seed.
 
 ## Entorno local

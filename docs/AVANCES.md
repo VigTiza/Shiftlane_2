@@ -2,14 +2,15 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F00 — Preparación del workspace
-- Último prompt completado: F00-P01
-- Siguiente prompt: F00-P02 (la conversión ya está hecha; falta solo docs/referencia/resumen.md)
+- Último prompt completado: F00-P02
+- Siguiente prompt: F00-P03 — requiere que el usuario instale Docker Desktop y Flutter
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test` = verificación de documentos de referencia)
 - Cómo levantar el entorno: `pnpm install` y `pnpm test` (Docker y servicios llegan en F00-P03)
 - Pendientes abiertos:
   - El usuario debe instalar Docker Desktop y Flutter antes de F00-P03.
   - F00-P03 necesita un repositorio remoto en GitHub para que corra el CI.
+  - En CI (Linux) el comando puede ser `python3`; ajustar los scripts docs:* en F00-P03.
   - Confirmar con el usuario: la portada de los .docx dice «RUTASYNC» (¿nombre anterior?).
 
 ## DECISIONES IMPORTANTES
@@ -30,6 +31,17 @@
   acciones del usuario, reporte final) quedan en CLAUDE.md para que apliquen siempre.
 
 ## HISTORIAL (más reciente arriba)
+### 2026-10-02 — F00-P02 Documentos de referencia en Markdown
+- Hecho: la conversión de los .docx y la revisión de tablas y listas se hicieron antes de
+  F00-P01 (ver esa entrada). En este prompt se agregó docs/referencia/resumen.md (65 líneas:
+  módulos, usuarios, reglas clave, planes y reglas de cobro, etapas) y su referencia en
+  CLAUDE.md.
+- Archivos principales: docs/referencia/resumen.md, CLAUDE.md, infra/scripts/docx-a-markdown.py.
+- Pruebas agregadas / resultado: `pnpm docs:verificar` ahora también falla si falta el
+  resumen o si pasa de 80 líneas. Pasa; se comprobó que falla con 85 líneas.
+- Problemas encontrados y cómo se resolvieron: ninguno.
+- Pendiente para después: el resumen se escribe a mano; si cambian los .docx, revisarlo.
+
 ### 2026-10-02 — F00-P01 Estructura del monorepo, CLAUDE.md y bitácora
 - Hecho: monorepo pnpm (package.json, pnpm-workspace.yaml) con apps/api, apps/web,
   apps/rider, apps/driver, apps/landing, packages/shared, assets/3d, infra, docs/referencia,
