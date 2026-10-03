@@ -54,6 +54,26 @@ export const SEED = {
     betaHr: { id: '00000000-0000-4000-8000-000000000305', email: 'rh@electronica-beta.example' },
     platformAdmin: { id: '00000000-0000-4000-8000-000000000306', email: 'admin@shiftlane.example' },
   },
+  vehicles: {
+    u001: {
+      id: '00000000-0000-4000-8000-000000000601',
+      economicNumber: 'U-001',
+      plates: 'EFR1234',
+      make: 'Mercedes-Benz',
+      model: 'Sprinter 516',
+      year: 2022,
+      capacity: 19,
+    },
+    u002: {
+      id: '00000000-0000-4000-8000-000000000602',
+      economicNumber: 'U-002',
+      plates: 'EFR5678',
+      make: 'Toyota',
+      model: 'Hiace',
+      year: 2021,
+      capacity: 15,
+    },
+  },
   drivers: {
     norteJuan: {
       id: '00000000-0000-4000-8000-000000000401',
@@ -90,7 +110,7 @@ export const SEED = {
  * Si se pasa `userPassword`, los usuarios de ejemplo pueden iniciar sesión con ella.
  */
 export async function seed(db: DbClient, options: { userPassword?: string } = {}): Promise<void> {
-  const { tenants, clientOrgs, plants, users, drivers, passengers } = SEED;
+  const { tenants, clientOrgs, plants, users, vehicles, drivers, passengers } = SEED;
   const passwordHash = options.userPassword ? await hashSecret(options.userPassword) : null;
 
   for (const tenant of Object.values(tenants)) {
@@ -201,11 +221,49 @@ export async function seed(db: DbClient, options: { userPassword?: string } = {}
     });
   }
 
-  for (const driver of Object.values(drivers)) {
+  for (const vehicle of Object.values(vehicles)) {
+    await db.vehicle.upsert({
+      where: { id: vehicle.id },
+      update: {},
+      create: { ...vehicle, tenantId: tenants.norte.id },
+    });
+  }
+  // Documentos: uno vigente, uno por vencer y uno vencido, relativos a la fecha de siembra.
+  const inDays = (days: number) => new Date(Date.UTC(2026, 9, 1) + days * 86_400_000);
+  const vehicleDocuments = [
+    {
+      id: '00000000-0000-4000-8000-000000000701',
+      vehicleId: vehicles.u001.id,
+      type: 'insurance',
+      expiresOn: inDays(200),
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000702',
+      vehicleId: vehicles.u001.id,
+      type: 'emissions_verification',
+      expiresOn: inDays(20),
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000703',
+      vehicleId: vehicles.u002.id,
+      type: 'insurance',
+      expiresOn: inDays(-5),
+    },
+  ] as const;
+  for (const doc of vehicleDocuments) {
+    await db.vehicleDocument.upsert({
+      where: { id: doc.id },
+      update: {},
+      create: { ...doc, tenantId: tenants.norte.id },
+    });
+  }
+
+  const habitual = [vehicles.u001.id, vehicles.u002.id];
+  for (const [index, driver] of Object.values(drivers).entries()) {
     await db.driver.upsert({
       where: { id: driver.id },
       update: {},
-      create: { ...driver, tenantId: tenants.norte.id },
+      create: { ...driver, tenantId: tenants.norte.id, habitualVehicleId: habitual[index] ?? null },
     });
   }
 
@@ -227,7 +285,7 @@ if (import.meta.main) {
     const userPassword = process.env.SEED_USER_PASSWORD;
     await seed(database.system, userPassword ? { userPassword } : {});
     console.log(
-      'Datos de ejemplo listos: 2 transportistas, 2 plantas, 6 usuarios, 2 choferes y 3 pasajeros.' +
+      'Datos de ejemplo listos: 2 transportistas, 2 plantas, 6 usuarios, 2 unidades, 2 choferes y 3 pasajeros.' +
         (userPassword
           ? ' Los usuarios entran con SEED_USER_PASSWORD.'
           : ' Usuarios sin contraseña (define SEED_USER_PASSWORD).'),

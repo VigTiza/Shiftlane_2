@@ -44,6 +44,39 @@ services:
       timeout: 5s
       retries: 20
 
+  # Almacenamiento de archivos compatible con S3 (consola en http://localhost:9001).
+  minio:
+    image: minio/minio:latest
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-shiftlane}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-shiftlane-dev}
+    ports:
+      - '127.0.0.1:${MINIO_PORT:-9000}:9000'
+      - '127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Crea el bucket "shiftlane" la primera vez.
+  minio-setup:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >-
+      sh -c "mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-shiftlane} $${MINIO_ROOT_PASSWORD:-shiftlane-dev}
+      && mc mb --ignore-existing local/shiftlane"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-shiftlane}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-shiftlane-dev}
+    restart: 'no'
+
 volumes:
   postgres-data:
   redis-data:
+  minio-data:

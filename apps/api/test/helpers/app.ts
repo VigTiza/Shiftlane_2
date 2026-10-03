@@ -5,6 +5,7 @@ import type { App } from '../../src/app.ts';
 import { loadEnv } from '../../src/config/env.ts';
 import { createMemoryMailer } from '../../src/lib/mailer.ts';
 import type { Mailer } from '../../src/lib/mailer.ts';
+import { createMemoryStorage } from '../../src/lib/storage.ts';
 
 /** Secretos fijos solo para pruebas. */
 export const TEST_SECRETS = {
@@ -26,6 +27,7 @@ export async function buildTestApp({
   beforeReady,
   mailer = createMemoryMailer(),
 }: TestAppOptions = {}): Promise<App> {
+  const storage = createMemoryStorage();
   const app = await buildApp({
     env: loadEnv({
       NODE_ENV: 'test',
@@ -37,6 +39,7 @@ export async function buildTestApp({
       ...env,
     }),
     mailer,
+    storage,
   });
   beforeReady?.(app);
   await app.ready();

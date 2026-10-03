@@ -2,6 +2,7 @@ import type { Env } from '../config/env.ts';
 import type { Cipher } from '../lib/crypto.ts';
 import type { Database } from '../lib/db.ts';
 import type { Mailer } from '../lib/mailer.ts';
+import type { ObjectStorage } from '../lib/storage.ts';
 import type { DriverAuthService } from '../modules/auth/driver-service.ts';
 import type { createPassengerAuthService } from '../modules/auth/passenger-service.ts';
 import type { AuthService } from '../modules/auth/service.ts';
@@ -14,6 +15,7 @@ declare module 'fastify' {
     tokens: TokenService;
     cipher: Cipher;
     mailer: Mailer;
+    storage: ObjectStorage;
     authServices: {
       auth: AuthService;
       drivers: DriverAuthService;

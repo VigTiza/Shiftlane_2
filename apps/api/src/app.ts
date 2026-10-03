@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
@@ -22,6 +23,9 @@ import type { Database } from './lib/db.ts';
 import { AppError } from './lib/errors.ts';
 import { createLogMailer, createSmtpMailer } from './lib/mailer.ts';
 import type { Mailer } from './lib/mailer.ts';
+import { createLocalStorage, createS3Storage } from './lib/storage.ts';
+import type { ObjectStorage } from './lib/storage.ts';
+import { MAX_UPLOAD_BYTES } from './lib/uploads.ts';
 import { createDriverAuthService } from './modules/auth/driver-service.ts';
 import { createPassengerAuthService } from './modules/auth/passenger-service.ts';
 import { auditRoutes } from './modules/audit/routes.ts';
@@ -32,6 +36,7 @@ import { createTokenService } from './modules/auth/tokens.ts';
 import { driverRoutes } from './modules/drivers/routes.ts';
 import { healthRoutes } from './modules/health/routes.ts';
 import { userRoutes } from './modules/users/routes.ts';
+import { vehicleRoutes } from './modules/vehicles/routes.ts';
 import { authPlugin } from './plugins/auth.ts';
 import { errorHandlerPlugin } from './plugins/error-handler.ts';
 
@@ -41,6 +46,20 @@ export interface BuildAppOptions {
   db?: Database;
   /** Envío de correo; por omisión SMTP si hay SMTP_URL, si no solo se registra. */
   mailer?: Mailer;
+  /** Almacenamiento de archivos; por omisión según STORAGE_DRIVER. */
+  storage?: ObjectStorage;
+}
+
+function createStorage(env: Env): ObjectStorage {
+  if (env.STORAGE_DRIVER === 'local') return createLocalStorage(env.STORAGE_LOCAL_DIR);
+  return createS3Storage({
+    bucket: env.S3_BUCKET ?? '',
+    region: env.S3_REGION,
+    endpoint: env.S3_ENDPOINT,
+    accessKeyId: env.S3_ACCESS_KEY_ID ?? '',
+    secretAccessKey: env.S3_SECRET_ACCESS_KEY ?? '',
+    forcePathStyle: env.S3_FORCE_PATH_STYLE,
+  });
 }
 
 function loggerOptions(env: Env): FastifyServerOptions['logger'] {
@@ -53,7 +72,7 @@ function loggerOptions(env: Env): FastifyServerOptions['logger'] {
   };
 }
 
-export async function buildApp({ env, db, mailer }: BuildAppOptions) {
+export async function buildApp({ env, db, mailer, storage }: BuildAppOptions) {
   const app = Fastify({
     logger: loggerOptions(env),
     trustProxy: env.TRUST_PROXY,
@@ -91,6 +110,7 @@ export async function buildApp({ env, db, mailer }: BuildAppOptions) {
   app.decorate('tokens', tokens);
   app.decorate('cipher', cipher);
   app.decorate('mailer', mail);
+  app.decorate('storage', storage ?? createStorage(env));
   app.decorate('authServices', {
     auth: createAuthService({ ...authDeps, cipher, mailer: mail, appUrl: env.APP_URL }),
     drivers: createDriverAuthService(authDeps),
@@ -105,6 +125,7 @@ export async function buildApp({ env, db, mailer }: BuildAppOptions) {
   await app.register(helmet);
   await app.register(cors, { origin: env.CORS_ORIGINS, credentials: true });
   await app.register(cookie);
+  await app.register(multipart, { limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 10 } });
   await app.register(authPlugin);
   await app.register(rateLimit, {
     max: env.RATE_LIMIT_MAX,
@@ -136,6 +157,7 @@ export async function buildApp({ env, db, mailer }: BuildAppOptions) {
   await app.register(driverRoutes);
   await app.register(userRoutes);
   await app.register(auditRoutes);
+  await app.register(vehicleRoutes);
 
   return app;
 }

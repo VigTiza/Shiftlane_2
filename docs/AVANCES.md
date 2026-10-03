@@ -2,16 +2,17 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F02 — Catálogos
-- Último prompt completado: F01-P04 (fase F01 terminada)
-- Siguiente prompt: F02-P01 Unidades, choferes y documentos
+- Último prompt completado: F02-P01
+- Siguiente prompt: F02-P02 Clientes, plantas, contratos y tarifas
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
   apps/api/.env). Con Docker: `pnpm services:up` (requiere reiniciar la PC una vez).
 - Pendientes abiertos:
   - PENDIENTE DE REINICIO: WSL y Docker Desktop instalados, se activan al reiniciar. Tras
-    reiniciar: abrir Docker Desktop, `pnpm services:up` y correr las pruebas con
-    Testcontainers / contra el compose.
+    reiniciar: abrir Docker Desktop, `pnpm services:up` (verificar que minio-setup no rompa
+    `--wait`) y correr las pruebas con Testcontainers / contra el compose, incluida la de S3
+    (S3_TEST_ENDPOINT=http://localhost:9000).
   - Push a GitHub: remoto origin = https://github.com/VigTiza/Shiftlane_2 (público), pero
     falta iniciar sesión (`gh auth login` + `gh auth setup-git`). Los commits están locales
     y el CI no ha corrido todavía.
@@ -65,8 +66,28 @@
 - 2026-10-03 Auditoría con disparadores de PostgreSQL (app.audit_row / app.enable_audit):
   cubre SQL directo, nunca guarda secretos, ignora columnas sin importancia. audit_log sin
   llaves foráneas para sobrevivir a lo que registra.
+- 2026-10-03 Archivos con interfaz ObjectStorage (carpeta local, S3/R2/MinIO); tipo de
+  archivo validado por sus bytes. Excel con read-excel-file/write-excel-file (exceljs está
+  sin mantenimiento). Importaciones: vista previa por omisión y todo o nada.
 
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F02-P01 Unidades, choferes y documentos
+- Hecho: migración fleet (vehicles, vehicle_documents, driver_documents y campos nuevos de
+  drivers: licencia, contacto de emergencia, unidad habitual, foto) con RLS, auditoría y
+  restricciones. Almacenamiento de archivos (local/S3/memoria) y subida validada por bytes.
+  Módulos vehicles y drivers: CRUD, búsqueda/filtros/paginación, documentos con estado de
+  vencimiento (vigente, por vencer a 30 días, vencido), archivo por documento, foto,
+  historial (bitácora), importación y exportación en Excel con plantilla. MinIO en el
+  compose. Etiquetas en español y documentStatus en packages/shared. Datos de ejemplo
+  con unidades y documentos.
+- Archivos principales: apps/api/src/modules/{vehicles,drivers}/*, src/lib/{storage,uploads,
+  excel,files,http-schemas,prisma-errors}.ts, packages/shared/src/catalogs.ts.
+- Pruebas agregadas / resultado: 17 de unidades, 9 de choferes, 3 de almacenamiento (1
+  omitida hasta tener MinIO) y 3 de vencimientos en shared. 142 pruebas de la API en verde.
+- Problemas encontrados y cómo se resolvieron: tipos de z.coerce en pipe (validadores
+  simplificados); regla no-unused-vars con prefijo _ para variables descartadas.
+- Pendiente para después: alertas de vencimiento y bloqueos (F11-P01); pantallas (F08-P02).
+
 ### 2026-10-03 — F01-P04 Roles, permisos y auditoría
 - Hecho: catálogo de 49 permisos por acción y matriz de 11 roles en packages/shared (con
   efectivePermissions y ajustes por usuario); permisos efectivos en el token; middleware

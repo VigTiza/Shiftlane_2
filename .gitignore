@@ -54,3 +54,6 @@ Thumbs.db
 
 # Cliente de Prisma generado (se regenera con `prisma generate`)
 apps/api/src/generated/
+
+# Archivos subidos en desarrollo (STORAGE_DRIVER=local)
+apps/api/storage/

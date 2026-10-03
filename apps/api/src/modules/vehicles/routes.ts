@@ -16,47 +16,43 @@ import {
 } from '../../lib/http-schemas.ts';
 import { readUpload } from '../../lib/uploads.ts';
 import { z } from '../../lib/zod.ts';
-import { authOf, dbContextOf, requirePermission, tenantIdOf } from '../../plugins/auth.ts';
+import { dbContextOf, requirePermission, tenantIdOf } from '../../plugins/auth.ts';
 import {
-  createDriverBody,
-  createDriverDocumentBody,
-  DRIVER_COLUMNS,
-  driverDetail,
-  driverDocumentSummary,
-  driverList,
-  driverRowSchema,
-  enrollmentResponse,
-  listDriversQuery,
-  messageResponse,
-  updateDriverBody,
-  updateDriverDocumentBody,
+  createDocumentBody,
+  createVehicleBody,
+  documentSummary,
+  listVehiclesQuery,
+  updateDocumentBody,
+  updateVehicleBody,
+  VEHICLE_COLUMNS,
+  vehicleDetail,
+  vehicleList,
+  vehicleRowSchema,
 } from './schemas.ts';
-import { createDriversService } from './service.ts';
+import { createVehiclesService } from './service.ts';
 
-const TAGS = ['Choferes'];
+const TAGS = ['Unidades'];
 const noContent = z.null();
 
-export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
-  const { drivers: driverAuth } = app.authServices;
-  const service = createDriversService({
+export const vehicleRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
+  const service = createVehiclesService({
     storage: app.storage,
     timeZone: app.config.DEFAULT_TIME_ZONE,
   });
-  const canRead = requirePermission(app, 'drivers.read');
-  const canWrite = requirePermission(app, 'drivers.write');
-  const canEnroll = requirePermission(app, 'drivers.enroll');
-  const canReadDocs = requirePermission(app, 'drivers.read', 'compliance.read');
-  const canWriteDocs = requirePermission(app, 'drivers.write', 'compliance.write');
+  const canRead = requirePermission(app, 'vehicles.read');
+  const canWrite = requirePermission(app, 'vehicles.write');
+  const canReadDocs = requirePermission(app, 'vehicles.read', 'compliance.read');
+  const canWriteDocs = requirePermission(app, 'vehicles.write', 'compliance.write');
 
   app.get(
-    '/drivers',
+    '/vehicles',
     {
       preHandler: canRead,
       schema: {
         tags: TAGS,
-        summary: 'Busca y lista choferes',
-        querystring: listDriversQuery,
-        response: { 200: driverList },
+        summary: 'Busca y lista unidades',
+        querystring: listVehiclesQuery,
+        response: { 200: vehicleList },
       },
     },
     (request) =>
@@ -64,70 +60,71 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   );
 
   app.post(
-    '/drivers',
+    '/vehicles',
     {
       preHandler: canWrite,
       schema: {
         tags: TAGS,
-        summary: 'Da de alta un chofer',
-        body: createDriverBody,
-        response: { 201: driverDetail },
+        summary: 'Da de alta una unidad',
+        body: createVehicleBody,
+        response: { 201: vehicleDetail },
       },
     },
     async (request, reply) => {
-      const driver = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
+      const vehicle = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
         service.create(tx, tenantIdOf(request), request.body),
       );
-      return reply.status(201).send(driver);
+      return reply.status(201).send(vehicle);
     },
   );
 
+  // Las rutas fijas van antes que /vehicles/:id.
   app.get(
-    '/drivers/export',
-    { preHandler: canRead, schema: { tags: TAGS, summary: 'Descarga los choferes en Excel' } },
+    '/vehicles/export',
+    { preHandler: canRead, schema: { tags: TAGS, summary: 'Descarga las unidades en Excel' } },
     async (request, reply) => {
-      const rows = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
+      const vehicles = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
         service.exportRows(tx),
       );
-      const buffer = await buildSpreadsheet(DRIVER_COLUMNS, rows, 'Choferes');
+      const buffer = await buildSpreadsheet(VEHICLE_COLUMNS, vehicles, 'Unidades');
       return sendFile(
         reply,
-        { body: buffer, contentType: XLSX_CONTENT_TYPE, fileName: 'choferes.xlsx' },
+        { body: buffer, contentType: XLSX_CONTENT_TYPE, fileName: 'unidades.xlsx' },
         'attachment',
       );
     },
   );
 
   app.get(
-    '/drivers/import/template',
+    '/vehicles/import/template',
     {
       preHandler: canRead,
-      schema: { tags: TAGS, summary: 'Plantilla de Excel para cargar choferes' },
+      schema: { tags: TAGS, summary: 'Plantilla de Excel para cargar unidades' },
     },
     async (_request, reply) => {
-      const buffer = await buildTemplate(DRIVER_COLUMNS, 'Choferes');
+      const buffer = await buildTemplate(VEHICLE_COLUMNS, 'Unidades');
       return sendFile(
         reply,
-        { body: buffer, contentType: XLSX_CONTENT_TYPE, fileName: 'plantilla-choferes.xlsx' },
+        { body: buffer, contentType: XLSX_CONTENT_TYPE, fileName: 'plantilla-unidades.xlsx' },
         'attachment',
       );
     },
   );
 
   app.post(
-    '/drivers/import',
+    '/vehicles/import',
     {
       preHandler: canWrite,
       schema: {
         tags: TAGS,
-        summary: 'Carga choferes desde Excel (dryRun=true solo valida)',
+        summary: 'Carga unidades desde Excel (dryRun=true solo valida)',
         querystring: importQuery,
         response: { 200: importReportSchema },
       },
     },
     async (request) => {
       const file = await readUpload(request, 'spreadsheet');
-      const parsed = await parseSpreadsheet(file.buffer, DRIVER_COLUMNS, driverRowSchema);
+      const parsed = await parseSpreadsheet(file.buffer, VEHICLE_COLUMNS, vehicleRowSchema);
       return withDbContext(
         app.db.app,
         dbContextOf(request),
@@ -151,14 +148,14 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   );
 
   app.get(
-    '/drivers/:id',
+    '/vehicles/:id',
     {
       preHandler: canRead,
       schema: {
         tags: TAGS,
-        summary: 'Detalle del chofer con sus documentos',
+        summary: 'Detalle de una unidad con sus documentos',
         params: idParams,
-        response: { 200: driverDetail },
+        response: { 200: vehicleDetail },
       },
     },
     (request) =>
@@ -166,15 +163,15 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   );
 
   app.patch(
-    '/drivers/:id',
+    '/vehicles/:id',
     {
       preHandler: canWrite,
       schema: {
         tags: TAGS,
-        summary: 'Edita un chofer',
+        summary: 'Edita una unidad',
         params: idParams,
-        body: updateDriverBody,
-        response: { 200: driverDetail },
+        body: updateVehicleBody,
+        response: { 200: vehicleDetail },
       },
     },
     (request) =>
@@ -184,12 +181,12 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   );
 
   app.delete(
-    '/drivers/:id',
+    '/vehicles/:id',
     {
       preHandler: canWrite,
       schema: {
         tags: TAGS,
-        summary: 'Da de baja un chofer y lo desvincula de sus celulares',
+        summary: 'Da de baja una unidad',
         params: idParams,
         response: { 204: noContent },
       },
@@ -203,12 +200,12 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   );
 
   app.get(
-    '/drivers/:id/history',
+    '/vehicles/:id/history',
     {
       preHandler: canRead,
       schema: {
         tags: TAGS,
-        summary: 'Historial de cambios del chofer y sus documentos',
+        summary: 'Historial de cambios de la unidad y sus documentos',
         params: idParams,
         response: { 200: z.array(auditEntrySchema) },
       },
@@ -220,12 +217,12 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   );
 
   app.put(
-    '/drivers/:id/photo',
+    '/vehicles/:id/photo',
     {
       preHandler: canWrite,
       schema: {
         tags: TAGS,
-        summary: 'Sube la foto del chofer',
+        summary: 'Sube la foto de la unidad (JPG, PNG o WebP)',
         params: idParams,
         response: { 204: noContent },
       },
@@ -240,8 +237,8 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   );
 
   app.get(
-    '/drivers/:id/photo',
-    { preHandler: canRead, schema: { tags: TAGS, summary: 'Foto del chofer', params: idParams } },
+    '/vehicles/:id/photo',
+    { preHandler: canRead, schema: { tags: TAGS, summary: 'Foto de la unidad', params: idParams } },
     async (request, reply) => {
       const photo = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
         service.getPhoto(tx, request.params.id),
@@ -251,15 +248,15 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   );
 
   app.post(
-    '/drivers/:id/documents',
+    '/vehicles/:id/documents',
     {
       preHandler: canWriteDocs,
       schema: {
         tags: TAGS,
-        summary: 'Agrega un documento al chofer',
+        summary: 'Agrega un documento a la unidad',
         params: idParams,
-        body: createDriverDocumentBody,
-        response: { 201: driverDocumentSummary },
+        body: createDocumentBody,
+        response: { 201: documentSummary },
       },
     },
     async (request, reply) => {
@@ -271,15 +268,15 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   );
 
   app.patch(
-    '/driver-documents/:id',
+    '/vehicle-documents/:id',
     {
       preHandler: canWriteDocs,
       schema: {
         tags: TAGS,
-        summary: 'Edita un documento de chofer',
+        summary: 'Edita un documento de unidad',
         params: idParams,
-        body: updateDriverDocumentBody,
-        response: { 200: driverDocumentSummary },
+        body: updateDocumentBody,
+        response: { 200: documentSummary },
       },
     },
     (request) =>
@@ -289,12 +286,12 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   );
 
   app.delete(
-    '/driver-documents/:id',
+    '/vehicle-documents/:id',
     {
       preHandler: canWriteDocs,
       schema: {
         tags: TAGS,
-        summary: 'Elimina un documento de chofer',
+        summary: 'Elimina un documento de unidad',
         params: idParams,
         response: { 204: noContent },
       },
@@ -308,14 +305,14 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   );
 
   app.put(
-    '/driver-documents/:id/file',
+    '/vehicle-documents/:id/file',
     {
       preHandler: canWriteDocs,
       schema: {
         tags: TAGS,
-        summary: 'Adjunta el archivo del documento',
+        summary: 'Adjunta el archivo del documento (PDF o imagen)',
         params: idParams,
-        response: { 200: driverDocumentSummary },
+        response: { 200: documentSummary },
       },
     },
     async (request) => {
@@ -327,7 +324,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   );
 
   app.get(
-    '/driver-documents/:id/file',
+    '/vehicle-documents/:id/file',
     {
       preHandler: canReadDocs,
       schema: { tags: TAGS, summary: 'Descarga el archivo del documento', params: idParams },
@@ -337,47 +334,6 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
         service.getFile(tx, request.params.id),
       );
       return sendFile(reply, file);
-    },
-  );
-
-  // --- Acceso a la app del chofer (F01-P03) ----------------------------------------
-
-  app.post(
-    '/drivers/:id/enrollment',
-    {
-      preHandler: canEnroll,
-      schema: {
-        tags: TAGS,
-        summary: 'Genera el código QR de un solo uso para vincular al chofer con su celular',
-        params: idParams,
-        response: { 201: enrollmentResponse },
-      },
-    },
-    async (request, reply) => {
-      const auth = authOf(request, 'user');
-      const enrollment = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
-        driverAuth.createEnrollment(tx, { driverId: request.params.id, createdByUserId: auth.sub }),
-      );
-      return reply.status(201).send(enrollment);
-    },
-  );
-
-  app.post(
-    '/drivers/:id/pin-reset',
-    {
-      preHandler: canEnroll,
-      schema: {
-        tags: TAGS,
-        summary: 'Restablece el PIN del chofer; creará uno nuevo en su celular',
-        params: idParams,
-        response: { 200: messageResponse },
-      },
-    },
-    async (request) => {
-      await withDbContext(app.db.app, dbContextOf(request), (tx) =>
-        driverAuth.resetPin(tx, request.params.id),
-      );
-      return { message: 'El PIN se restableció. El chofer creará uno nuevo al entrar.' };
     },
   );
 

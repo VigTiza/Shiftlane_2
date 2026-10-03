@@ -46,6 +46,14 @@ export function contextFromClaims(claims: AccessClaims): DbContext {
   }
 }
 
+/** Tenant de la sesión. Para rutas de la transportista (los permisos ya lo garantizan). */
+export function tenantIdOf(request: FastifyRequest): string {
+  const claims = authOf(request);
+  const tenantId = claims.kind === 'passenger' ? null : claims.tenantId;
+  if (!tenantId) throw new ForbiddenError();
+  return tenantId;
+}
+
 /** Contexto de base de datos de la petición, con los datos para la bitácora. */
 export function dbContextOf(request: FastifyRequest): DbContext {
   return { ...contextFromClaims(authOf(request)), requestId: request.id, ip: request.ip };

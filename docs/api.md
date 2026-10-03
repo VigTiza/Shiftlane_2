@@ -128,3 +128,24 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 | PUT | /users/:id/roles | `users.manage` | Roles de un usuario |
 | PUT | /users/:id/permissions | `users.manage` | Permisos otorgados o quitados |
 | GET | /audit-log | `audit.read` | Historial de cambios |
+| GET/POST | /vehicles | `vehicles.read` / `vehicles.write` | Buscar (search, status, page, pageSize) y dar de alta unidades |
+| GET/PATCH/DELETE | /vehicles/:id | `vehicles.read` / `vehicles.write` | Detalle con documentos, edición y baja |
+| GET | /vehicles/:id/history | `vehicles.read` | Historial de la unidad y sus documentos |
+| GET/PUT | /vehicles/:id/photo | `vehicles.read` / `vehicles.write` | Foto (JPG, PNG o WebP) |
+| POST | /vehicles/:id/documents | `vehicles.write` o `compliance.write` | Documento con vencimiento |
+| PATCH/DELETE | /vehicle-documents/:id | `vehicles.write` o `compliance.write` | Editar o eliminar documento |
+| GET/PUT | /vehicle-documents/:id/file | lectura / escritura de documentos | Archivo del documento (PDF o imagen, máx. 10 MB) |
+| GET | /vehicles/export, /vehicles/import/template | `vehicles.read` | Excel de unidades y plantilla |
+| POST | /vehicles/import?dryRun= | `vehicles.write` | Carga desde Excel; dryRun=true valida sin guardar |
+| GET/POST | /drivers | `drivers.read` / `drivers.write` | Buscar y dar de alta choferes |
+| GET/PATCH/DELETE | /drivers/:id | `drivers.read` / `drivers.write` | Detalle con documentos y acceso, edición y baja |
+| GET | /drivers/:id/history | `drivers.read` | Historial del chofer, su PIN y sus documentos |
+| GET/PUT | /drivers/:id/photo | `drivers.read` / `drivers.write` | Foto del chofer |
+| POST | /drivers/:id/documents | `drivers.write` o `compliance.write` | Licencia, examen médico, antidoping, capacitación |
+| PATCH/DELETE | /driver-documents/:id | `drivers.write` o `compliance.write` | Editar o eliminar documento |
+| GET/PUT | /driver-documents/:id/file | lectura / escritura de documentos | Archivo del documento |
+| GET | /drivers/export, /drivers/import/template | `drivers.read` | Excel de choferes y plantilla |
+| POST | /drivers/import?dryRun= | `drivers.write` | Carga desde Excel (unidad habitual por número económico) |
+
+Las cargas de Excel validan cada fila y devuelven `{ totalRows, created, updated, errors: [{ row, column, message }], applied }`.
+Si hay un solo error no se guarda nada.

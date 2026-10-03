@@ -101,6 +101,13 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
 - Tabla nueva = `tenant_id` + `ENABLE ROW LEVEL SECURITY` + políticas `TO shiftlane_app` +
   `SELECT app.enable_audit('tabla', ARRAY[columnas_sin_importancia])` en la misma migración
   (test/security/tenant-isolation.test.ts y auditoria.test.ts lo exigen).
+- Archivos: `app.storage` (src/lib/storage.ts: local, S3/R2/MinIO, memoria en pruebas);
+  subir con `readUpload(request, 'document' | 'image' | 'spreadsheet')` (valida por bytes,
+  máx. 10 MB) y llaves con `storageKey(tenantId, carpeta, ext)`; descargar con `sendFile`.
+- Excel: src/lib/excel.ts (`parseSpreadsheet` valida fila por fila con Zod,
+  `buildSpreadsheet`, `buildTemplate`); importar = vista previa con `dryRun` y todo o nada.
+- Fechas de negocio como AAAA-MM-DD (`dateString`, `toDbDate`, `fromDbDate` en
+  src/lib/http-schemas.ts); estado de documentos con `documentStatus` de @shiftlane/shared.
 - Migración nueva: editar prisma/schema.prisma, `pnpm --filter @shiftlane/api db:migrate:new`,
   agregar el SQL de RLS al migration.sql generado y aplicar con `db:migrate`.
   Datos de ejemplo en prisma/seed.ts (`pnpm db:seed`).

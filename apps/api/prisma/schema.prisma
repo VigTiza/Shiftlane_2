@@ -47,6 +47,9 @@ model Tenant {
   driverEnrollments   DriverEnrollment[]
   devices             Device[]
   driverDevices       DriverDevice[]
+  vehicles            Vehicle[]
+  vehicleDocuments    VehicleDocument[]
+  driverDocuments     DriverDocument[]
 
   @@map("tenants")
 }
@@ -344,21 +347,31 @@ enum DriverStatus {
 }
 
 model Driver {
-  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId       String       @map("tenant_id") @db.Uuid
-  fullName       String       @map("full_name")
-  employeeNumber String?      @map("employee_number")
-  phone          String?
-  status         DriverStatus @default(active)
-  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt      DateTime?    @map("deleted_at") @db.Timestamptz(3)
+  id                    String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId              String       @map("tenant_id") @db.Uuid
+  fullName              String       @map("full_name")
+  employeeNumber        String?      @map("employee_number")
+  phone                 String?
+  status                DriverStatus @default(active)
+  licenseNumber         String?      @map("license_number")
+  /// Tipo de licencia según la entidad (por ejemplo, "C" o "Federal B").
+  licenseType           String?      @map("license_type")
+  emergencyContactName  String?      @map("emergency_contact_name")
+  emergencyContactPhone String?      @map("emergency_contact_phone")
+  habitualVehicleId     String?      @map("habitual_vehicle_id") @db.Uuid
+  photoKey              String?      @map("photo_key")
+  notes                 String?
+  createdAt             DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt             DateTime?    @map("deleted_at") @db.Timestamptz(3)
 
-  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  pin         DriverPin?
-  enrollments DriverEnrollment[]
-  devices     DriverDevice[]
-  sessions    Session[]
+  tenant          Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  habitualVehicle Vehicle?           @relation(fields: [habitualVehicleId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  pin             DriverPin?
+  enrollments     DriverEnrollment[]
+  devices         DriverDevice[]
+  sessions        Session[]
+  documents       DriverDocument[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, employeeNumber])
@@ -471,4 +484,109 @@ model Passenger {
   @@unique([clientOrgId, employeeNumber])
   @@index([plantId])
   @@map("passengers")
+}
+
+// ---------------------------------------------------------------------------
+// Unidades y documentos (catálogos de flota)
+// ---------------------------------------------------------------------------
+
+enum VehicleStatus {
+  available
+  on_route
+  maintenance
+  out_of_service
+}
+
+model Vehicle {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String        @map("tenant_id") @db.Uuid
+  /// Número económico: identificador interno de la unidad en la transportista.
+  economicNumber String        @map("economic_number")
+  plates         String
+  make           String?
+  model          String
+  year           Int
+  /// Asientos para pasajeros.
+  capacity       Int
+  status         VehicleStatus @default(available)
+  odometerKm     Int           @default(0) @map("odometer_km")
+  photoKey       String?       @map("photo_key")
+  notes          String?
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime?     @map("deleted_at") @db.Timestamptz(3)
+
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  documents       VehicleDocument[]
+  habitualDrivers Driver[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, economicNumber])
+  @@unique([tenantId, plates])
+  @@index([tenantId, status])
+  @@map("vehicles")
+}
+
+enum VehicleDocumentType {
+  permit
+  insurance
+  registration_card
+  emissions_verification
+  other
+}
+
+model VehicleDocument {
+  id        String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String              @map("tenant_id") @db.Uuid
+  vehicleId String              @map("vehicle_id") @db.Uuid
+  type      VehicleDocumentType
+  number    String?
+  issuedOn  DateTime?           @map("issued_on") @db.Date
+  expiresOn DateTime?           @map("expires_on") @db.Date
+  fileKey   String?             @map("file_key")
+  fileName  String?             @map("file_name")
+  fileType  String?             @map("file_type")
+  notes     String?
+  createdAt DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime?           @map("deleted_at") @db.Timestamptz(3)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  vehicle Vehicle @relation(fields: [vehicleId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId, expiresOn])
+  @@index([vehicleId])
+  @@map("vehicle_documents")
+}
+
+enum DriverDocumentType {
+  license
+  medical_exam
+  drug_test
+  training
+  other
+}
+
+model DriverDocument {
+  id        String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String             @map("tenant_id") @db.Uuid
+  driverId  String             @map("driver_id") @db.Uuid
+  type      DriverDocumentType
+  number    String?
+  issuedOn  DateTime?          @map("issued_on") @db.Date
+  expiresOn DateTime?          @map("expires_on") @db.Date
+  fileKey   String?            @map("file_key")
+  fileName  String?            @map("file_name")
+  fileType  String?            @map("file_type")
+  notes     String?
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime?          @map("deleted_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  driver Driver @relation(fields: [driverId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId, expiresOn])
+  @@index([driverId])
+  @@map("driver_documents")
 }
