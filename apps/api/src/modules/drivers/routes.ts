@@ -51,7 +51,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.get(
     '/drivers',
     {
-      preHandler: canRead,
+      onRequest: canRead,
       schema: {
         tags: TAGS,
         summary: 'Busca y lista choferes',
@@ -66,7 +66,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.post(
     '/drivers',
     {
-      preHandler: canWrite,
+      onRequest: canWrite,
       schema: {
         tags: TAGS,
         summary: 'Da de alta un chofer',
@@ -84,7 +84,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
 
   app.get(
     '/drivers/export',
-    { preHandler: canRead, schema: { tags: TAGS, summary: 'Descarga los choferes en Excel' } },
+    { onRequest: canRead, schema: { tags: TAGS, summary: 'Descarga los choferes en Excel' } },
     async (request, reply) => {
       const rows = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
         service.exportRows(tx),
@@ -101,7 +101,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.get(
     '/drivers/import/template',
     {
-      preHandler: canRead,
+      onRequest: canRead,
       schema: { tags: TAGS, summary: 'Plantilla de Excel para cargar choferes' },
     },
     async (_request, reply) => {
@@ -117,7 +117,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.post(
     '/drivers/import',
     {
-      preHandler: canWrite,
+      onRequest: canWrite,
       schema: {
         tags: TAGS,
         summary: 'Carga choferes desde Excel (dryRun=true solo valida)',
@@ -153,7 +153,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.get(
     '/drivers/:id',
     {
-      preHandler: canRead,
+      onRequest: canRead,
       schema: {
         tags: TAGS,
         summary: 'Detalle del chofer con sus documentos',
@@ -168,7 +168,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.patch(
     '/drivers/:id',
     {
-      preHandler: canWrite,
+      onRequest: canWrite,
       schema: {
         tags: TAGS,
         summary: 'Edita un chofer',
@@ -186,7 +186,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.delete(
     '/drivers/:id',
     {
-      preHandler: canWrite,
+      onRequest: canWrite,
       schema: {
         tags: TAGS,
         summary: 'Da de baja un chofer y lo desvincula de sus celulares',
@@ -205,7 +205,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.get(
     '/drivers/:id/history',
     {
-      preHandler: canRead,
+      onRequest: canRead,
       schema: {
         tags: TAGS,
         summary: 'Historial de cambios del chofer y sus documentos',
@@ -222,7 +222,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.put(
     '/drivers/:id/photo',
     {
-      preHandler: canWrite,
+      onRequest: canWrite,
       schema: {
         tags: TAGS,
         summary: 'Sube la foto del chofer',
@@ -241,7 +241,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
 
   app.get(
     '/drivers/:id/photo',
-    { preHandler: canRead, schema: { tags: TAGS, summary: 'Foto del chofer', params: idParams } },
+    { onRequest: canRead, schema: { tags: TAGS, summary: 'Foto del chofer', params: idParams } },
     async (request, reply) => {
       const photo = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
         service.getPhoto(tx, request.params.id),
@@ -253,7 +253,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.post(
     '/drivers/:id/documents',
     {
-      preHandler: canWriteDocs,
+      onRequest: canWriteDocs,
       schema: {
         tags: TAGS,
         summary: 'Agrega un documento al chofer',
@@ -273,7 +273,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.patch(
     '/driver-documents/:id',
     {
-      preHandler: canWriteDocs,
+      onRequest: canWriteDocs,
       schema: {
         tags: TAGS,
         summary: 'Edita un documento de chofer',
@@ -291,7 +291,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.delete(
     '/driver-documents/:id',
     {
-      preHandler: canWriteDocs,
+      onRequest: canWriteDocs,
       schema: {
         tags: TAGS,
         summary: 'Elimina un documento de chofer',
@@ -310,7 +310,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.put(
     '/driver-documents/:id/file',
     {
-      preHandler: canWriteDocs,
+      onRequest: canWriteDocs,
       schema: {
         tags: TAGS,
         summary: 'Adjunta el archivo del documento',
@@ -329,7 +329,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.get(
     '/driver-documents/:id/file',
     {
-      preHandler: canReadDocs,
+      onRequest: canReadDocs,
       schema: { tags: TAGS, summary: 'Descarga el archivo del documento', params: idParams },
     },
     async (request, reply) => {
@@ -345,7 +345,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.post(
     '/drivers/:id/enrollment',
     {
-      preHandler: canEnroll,
+      onRequest: canEnroll,
       schema: {
         tags: TAGS,
         summary: 'Genera el código QR de un solo uso para vincular al chofer con su celular',
@@ -365,7 +365,7 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.post(
     '/drivers/:id/pin-reset',
     {
-      preHandler: canEnroll,
+      onRequest: canEnroll,
       schema: {
         tags: TAGS,
         summary: 'Restablece el PIN del chofer; creará uno nuevo en su celular',

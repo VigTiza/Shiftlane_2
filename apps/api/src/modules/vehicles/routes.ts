@@ -47,7 +47,7 @@ export const vehicleRoutes: FastifyPluginCallbackZod = (app, _options, done) => 
   app.get(
     '/vehicles',
     {
-      preHandler: canRead,
+      onRequest: canRead,
       schema: {
         tags: TAGS,
         summary: 'Busca y lista unidades',
@@ -62,7 +62,7 @@ export const vehicleRoutes: FastifyPluginCallbackZod = (app, _options, done) => 
   app.post(
     '/vehicles',
     {
-      preHandler: canWrite,
+      onRequest: canWrite,
       schema: {
         tags: TAGS,
         summary: 'Da de alta una unidad',
@@ -81,7 +81,7 @@ export const vehicleRoutes: FastifyPluginCallbackZod = (app, _options, done) => 
   // Las rutas fijas van antes que /vehicles/:id.
   app.get(
     '/vehicles/export',
-    { preHandler: canRead, schema: { tags: TAGS, summary: 'Descarga las unidades en Excel' } },
+    { onRequest: canRead, schema: { tags: TAGS, summary: 'Descarga las unidades en Excel' } },
     async (request, reply) => {
       const vehicles = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
         service.exportRows(tx),
@@ -98,7 +98,7 @@ export const vehicleRoutes: FastifyPluginCallbackZod = (app, _options, done) => 
   app.get(
     '/vehicles/import/template',
     {
-      preHandler: canRead,
+      onRequest: canRead,
       schema: { tags: TAGS, summary: 'Plantilla de Excel para cargar unidades' },
     },
     async (_request, reply) => {
@@ -114,7 +114,7 @@ export const vehicleRoutes: FastifyPluginCallbackZod = (app, _options, done) => 
   app.post(
     '/vehicles/import',
     {
-      preHandler: canWrite,
+      onRequest: canWrite,
       schema: {
         tags: TAGS,
         summary: 'Carga unidades desde Excel (dryRun=true solo valida)',
@@ -150,7 +150,7 @@ export const vehicleRoutes: FastifyPluginCallbackZod = (app, _options, done) => 
   app.get(
     '/vehicles/:id',
     {
-      preHandler: canRead,
+      onRequest: canRead,
       schema: {
         tags: TAGS,
         summary: 'Detalle de una unidad con sus documentos',
@@ -165,7 +165,7 @@ export const vehicleRoutes: FastifyPluginCallbackZod = (app, _options, done) => 
   app.patch(
     '/vehicles/:id',
     {
-      preHandler: canWrite,
+      onRequest: canWrite,
       schema: {
         tags: TAGS,
         summary: 'Edita una unidad',
@@ -183,7 +183,7 @@ export const vehicleRoutes: FastifyPluginCallbackZod = (app, _options, done) => 
   app.delete(
     '/vehicles/:id',
     {
-      preHandler: canWrite,
+      onRequest: canWrite,
       schema: {
         tags: TAGS,
         summary: 'Da de baja una unidad',
@@ -202,7 +202,7 @@ export const vehicleRoutes: FastifyPluginCallbackZod = (app, _options, done) => 
   app.get(
     '/vehicles/:id/history',
     {
-      preHandler: canRead,
+      onRequest: canRead,
       schema: {
         tags: TAGS,
         summary: 'Historial de cambios de la unidad y sus documentos',
@@ -219,7 +219,7 @@ export const vehicleRoutes: FastifyPluginCallbackZod = (app, _options, done) => 
   app.put(
     '/vehicles/:id/photo',
     {
-      preHandler: canWrite,
+      onRequest: canWrite,
       schema: {
         tags: TAGS,
         summary: 'Sube la foto de la unidad (JPG, PNG o WebP)',
@@ -238,7 +238,7 @@ export const vehicleRoutes: FastifyPluginCallbackZod = (app, _options, done) => 
 
   app.get(
     '/vehicles/:id/photo',
-    { preHandler: canRead, schema: { tags: TAGS, summary: 'Foto de la unidad', params: idParams } },
+    { onRequest: canRead, schema: { tags: TAGS, summary: 'Foto de la unidad', params: idParams } },
     async (request, reply) => {
       const photo = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
         service.getPhoto(tx, request.params.id),
@@ -250,7 +250,7 @@ export const vehicleRoutes: FastifyPluginCallbackZod = (app, _options, done) => 
   app.post(
     '/vehicles/:id/documents',
     {
-      preHandler: canWriteDocs,
+      onRequest: canWriteDocs,
       schema: {
         tags: TAGS,
         summary: 'Agrega un documento a la unidad',
@@ -270,7 +270,7 @@ export const vehicleRoutes: FastifyPluginCallbackZod = (app, _options, done) => 
   app.patch(
     '/vehicle-documents/:id',
     {
-      preHandler: canWriteDocs,
+      onRequest: canWriteDocs,
       schema: {
         tags: TAGS,
         summary: 'Edita un documento de unidad',
@@ -288,7 +288,7 @@ export const vehicleRoutes: FastifyPluginCallbackZod = (app, _options, done) => 
   app.delete(
     '/vehicle-documents/:id',
     {
-      preHandler: canWriteDocs,
+      onRequest: canWriteDocs,
       schema: {
         tags: TAGS,
         summary: 'Elimina un documento de unidad',
@@ -307,7 +307,7 @@ export const vehicleRoutes: FastifyPluginCallbackZod = (app, _options, done) => 
   app.put(
     '/vehicle-documents/:id/file',
     {
-      preHandler: canWriteDocs,
+      onRequest: canWriteDocs,
       schema: {
         tags: TAGS,
         summary: 'Adjunta el archivo del documento (PDF o imagen)',
@@ -326,7 +326,7 @@ export const vehicleRoutes: FastifyPluginCallbackZod = (app, _options, done) => 
   app.get(
     '/vehicle-documents/:id/file',
     {
-      preHandler: canReadDocs,
+      onRequest: canReadDocs,
       schema: { tags: TAGS, summary: 'Descarga el archivo del documento', params: idParams },
     },
     async (request, reply) => {

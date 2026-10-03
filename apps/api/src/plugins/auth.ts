@@ -1,5 +1,5 @@
 import type { Permission } from '@shiftlane/shared';
-import type { FastifyInstance, FastifyRequest, preHandlerAsyncHookHandler } from 'fastify';
+import type { FastifyInstance, FastifyRequest, onRequestAsyncHookHandler } from 'fastify';
 import fp from 'fastify-plugin';
 
 import type { DbContext } from '../lib/db.ts';
@@ -75,11 +75,14 @@ async function verifyRequest(app: FastifyInstance, request: FastifyRequest): Pro
   return claims;
 }
 
-/** Exige un token de acceso válido y, opcionalmente, un tipo de sesión. */
+/**
+ * Exige un token de acceso válido y, opcionalmente, un tipo de sesión. Se usa en `onRequest`
+ * para rechazar antes de leer o validar el cuerpo de la petición.
+ */
 export function requireAuth(
   app: FastifyInstance,
   options: { kinds?: Kind[] } = {},
-): preHandlerAsyncHookHandler {
+): onRequestAsyncHookHandler {
   return async (request) => {
     const claims = await verifyRequest(app, request);
     if (options.kinds && !options.kinds.includes(claims.kind)) {
@@ -96,7 +99,7 @@ export function requireAuth(
 export function requirePermission(
   app: FastifyInstance,
   ...permissions: Permission[]
-): preHandlerAsyncHookHandler {
+): onRequestAsyncHookHandler {
   return async (request) => {
     const claims = await verifyRequest(app, request);
     if (claims.kind !== 'user' || !permissions.some((p) => claims.permissions.includes(p))) {

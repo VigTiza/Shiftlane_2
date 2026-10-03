@@ -144,7 +144,7 @@ export const authRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.post(
     '/auth/logout-all',
     {
-      preHandler: userOnly,
+      onRequest: userOnly,
       schema: {
         tags: TAGS,
         summary: 'Cierra todas las sesiones del usuario',
@@ -161,7 +161,7 @@ export const authRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.get(
     '/auth/sessions',
     {
-      preHandler: userOnly,
+      onRequest: userOnly,
       schema: {
         tags: TAGS,
         summary: 'Lista las sesiones abiertas del usuario',
@@ -174,7 +174,7 @@ export const authRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.delete(
     '/auth/sessions/:sessionId',
     {
-      preHandler: userOnly,
+      onRequest: userOnly,
       schema: {
         tags: TAGS,
         summary: 'Cierra una sesión del usuario',
@@ -191,7 +191,7 @@ export const authRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.get(
     '/auth/me',
     {
-      preHandler: requireAuth(app),
+      onRequest: requireAuth(app),
       schema: { tags: TAGS, summary: 'Datos de la sesión actual', response: { 200: meResponse } },
     },
     (request) => auth.me(authOf(request)),
@@ -237,7 +237,7 @@ export const authRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.post(
     '/auth/2fa/setup',
     {
-      preHandler: userOnly,
+      onRequest: userOnly,
       schema: {
         tags: TAGS,
         summary: 'Genera el secreto para la verificación en dos pasos',
@@ -250,7 +250,7 @@ export const authRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.post(
     '/auth/2fa/enable',
     {
-      preHandler: userOnly,
+      onRequest: userOnly,
       schema: {
         tags: TAGS,
         summary: 'Activa la verificación en dos pasos',
@@ -267,7 +267,7 @@ export const authRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.post(
     '/auth/2fa/disable',
     {
-      preHandler: userOnly,
+      onRequest: userOnly,
       schema: {
         tags: TAGS,
         summary: 'Desactiva la verificación en dos pasos',

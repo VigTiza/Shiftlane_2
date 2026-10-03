@@ -87,13 +87,15 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
 - Errores esperados: clases de src/lib/errors.ts (mensaje en español para el usuario). El
   manejador central da el formato `{ error: { code, message, details? }, requestId }`.
 - Pruebas con Vitest + Supertest; la base real llega con `inject('databaseUrl')` y la app de
-  prueba con test/helpers/app.ts (docs/decisiones/0002).
+  prueba con test/helpers/app.ts (docs/decisiones/0002). Datos con test/helpers/fixtures.ts.
+  Nunca poner `await` dentro de una cadena de Supertest (obtener tokens antes): rompe el
+  servidor efímero con "Cannot read properties of null (reading 'address')".
 - Base de datos (docs/decisiones/0003): Prisma 7 (cliente generado en src/generated, no se
   versiona). `app.db.app` respeta RLS y siempre se usa dentro de
   `withDbContext(db.app, { tenantId, clientOrgId, userId }, (tx) => ...)`. `app.db.system`
   se salta RLS: solo autenticación, tareas programadas y consola de plataforma.
 - Autorización por acción (docs/api.md): rutas de usuarios web con
-  `preHandler: requirePermission(app, 'drivers.enroll')`; choferes/pasajeros con
+  `onRequest: requirePermission(app, 'drivers.enroll')`; choferes/pasajeros con
   `requireAuth(app, { kinds: [...] })`. Permisos nuevos se agregan en
   packages/shared/src/permissions.ts y luego `pnpm docs:permisos`.
 - En los handlers: `withDbContext(app.db.app, dbContextOf(request), (tx) => ...)` (contexto,

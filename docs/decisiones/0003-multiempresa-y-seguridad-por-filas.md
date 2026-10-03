@@ -28,7 +28,16 @@ El contexto sale siempre del token verificado en el servidor, nunca de la petici
   la atiendan varias transportistas, para que vea todo en un tablero.
 - Una transportista ve una empresa cliente o planta si tiene un `service_agreement` con
   ella, o si la registró y la empresa aún no tiene usuarios propios (`claimed_at` nulo).
-- Con una empresa que ya tiene usuarios, el acuerdo se crea por invitación (F02-P02).
+- Con una empresa que ya tiene usuarios, el acuerdo se crea por invitación (F02-P02):
+  - La transportista invita por correo a la planta que registró. Al aceptar se crea el
+    usuario de planta, la empresa queda «reclamada» (`claimed_at`) y la transportista ya no
+    la edita; la sigue viendo por su acuerdo de servicio.
+  - Si quien acepta ya es usuario de otra empresa cliente (la planta ya usa Shiftlane con
+    otra transportista), acepta desde su cuenta eligiendo su planta real: se crea el acuerdo
+    con esa planta y los contratos, contactos y prospectos que la transportista había
+    capturado pasan a la empresa real; la empresa provisional queda archivada.
+- Las pruebas de autorización corren en `onRequest`: sin permiso se responde 403 antes de
+  leer o validar el cuerpo de la petición.
 - Los datos comerciales de cada transportista (contactos, contratos, tarifas) van en tablas
   con `tenant_id`.
 

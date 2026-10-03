@@ -2,12 +2,9 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F02 — Catálogos
-- Último prompt completado: F02-P01
-- Siguiente prompt: F02-P02 Clientes, plantas, contratos y tarifas
-- Trabajo a medias (si lo hay): F02-P02. Hecho: motor de tarifas en packages/shared
-  (contract-rates.ts, 16 pruebas) y migración crm (plant_gates, client_contacts, contracts,
-  rates, penalties, leads, plant_invitations) con RLS y auditoría. Falta: módulos de la API
-  (clientes/plantas/puertas/contactos, contratos/tarifas/cotizador, prospectos, invitaciones).
+- Último prompt completado: F02-P02
+- Siguiente prompt: F02-P03 Pasajeros y credenciales
+- Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
   apps/api/.env). Con Docker: `pnpm services:up` (requiere reiniciar la PC una vez).
@@ -72,8 +69,31 @@
 - 2026-10-03 Archivos con interfaz ObjectStorage (carpeta local, S3/R2/MinIO); tipo de
   archivo validado por sus bytes. Excel con read-excel-file/write-excel-file (exceljs está
   sin mantenimiento). Importaciones: vista previa por omisión y todo o nada.
+- 2026-10-03 Motor de tarifas en packages/shared (centavos; tarifa ganadora por prioridad y
+  especificidad; per_vehicle = precio por viaje según capacidad; viaje no realizado = no se
+  cobra y su penalización queda a favor del cliente). Invitaciones de planta con fusión de
+  empresas duplicadas (ver ADR 0003). Autorización en onRequest (403 antes de validar).
 
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F02-P02 Clientes, plantas, contratos y tarifas
+- Hecho: motor de tarifas y penalizaciones (packages/shared/src/contract-rates.ts).
+  Migración crm (plant_gates con QR fijo, client_contacts, contracts, rates, penalties,
+  leads, plant_invitations) con RLS (contratos y contactos solo de empresas atendidas o
+  administradas, verificado en la base), auditoría y CHECKs. Módulos clients (empresas,
+  plantas con ubicación PostGIS y código de activación, puertas, contactos), contracts
+  (tarifas con condiciones, penalizaciones, cotizador), leads (etapas y conversión) e
+  invitations (invitar por correo, aceptar creando cuenta, aceptar con cuenta existente y
+  fusionar datos). Autorización movida de preHandler a onRequest.
+- Archivos principales: packages/shared/src/contract-rates.ts, apps/api/src/modules/{clients,
+  contracts,leads,invitations}/*, prisma/migrations/*_crm.
+- Pruebas agregadas / resultado: 16 del motor de tarifas y 29 de la API (clientes, puertas,
+  contactos, aislamiento, contratos, cotizador con domingo/nocturno/km/pasajero/penalizaciones,
+  prospectos, invitaciones y fusión). 171 pruebas de la API y 28 de shared en verde.
+- Problemas encontrados y cómo se resolvieron: 400 antes de 403 por validar el cuerpo antes
+  del preHandler (autorización a onRequest); Supertest con await en cadena (nota en CLAUDE.md).
+- Pendiente para después: route_id de las tarifas sin llave foránea hasta F03; los pasajeros
+  de una empresa provisional no se mueven en la fusión (revisar en F02-P03/F09).
+
 ### 2026-10-03 — F02-P01 Unidades, choferes y documentos
 - Hecho: migración fleet (vehicles, vehicle_documents, driver_documents y campos nuevos de
   drivers: licencia, contacto de emergencia, unidad habitual, foto) con RLS, auditoría y

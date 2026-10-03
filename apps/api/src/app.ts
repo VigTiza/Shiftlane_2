@@ -29,12 +29,16 @@ import { MAX_UPLOAD_BYTES } from './lib/uploads.ts';
 import { createDriverAuthService } from './modules/auth/driver-service.ts';
 import { createPassengerAuthService } from './modules/auth/passenger-service.ts';
 import { auditRoutes } from './modules/audit/routes.ts';
+import { clientRoutes } from './modules/clients/routes.ts';
+import { contractRoutes } from './modules/contracts/routes.ts';
 import { authRoutes } from './modules/auth/routes.ts';
 import { createAuthService } from './modules/auth/service.ts';
 import { createSessionService } from './modules/auth/sessions.ts';
 import { createTokenService } from './modules/auth/tokens.ts';
 import { driverRoutes } from './modules/drivers/routes.ts';
 import { healthRoutes } from './modules/health/routes.ts';
+import { invitationRoutes } from './modules/invitations/routes.ts';
+import { leadRoutes } from './modules/leads/routes.ts';
 import { userRoutes } from './modules/users/routes.ts';
 import { vehicleRoutes } from './modules/vehicles/routes.ts';
 import { authPlugin } from './plugins/auth.ts';
@@ -158,6 +162,10 @@ export async function buildApp({ env, db, mailer, storage }: BuildAppOptions) {
   await app.register(userRoutes);
   await app.register(auditRoutes);
   await app.register(vehicleRoutes);
+  await app.register(clientRoutes);
+  await app.register(contractRoutes);
+  await app.register(leadRoutes);
+  await app.register(invitationRoutes);
 
   return app;
 }

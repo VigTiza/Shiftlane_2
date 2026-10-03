@@ -147,5 +147,26 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 | GET | /drivers/export, /drivers/import/template | `drivers.read` | Excel de choferes y plantilla |
 | POST | /drivers/import?dryRun= | `drivers.write` | Carga desde Excel (unidad habitual por número económico) |
 
+| GET/POST | /client-orgs | `clients.read` / `clients.write` | Empresas cliente (atendidas o administradas) y alta |
+| GET/PATCH | /client-orgs/:id | `clients.read` / `clients.write` | Ficha con plantas, contactos y contratos; editar solo si la administra |
+| POST | /client-orgs/:id/plants | `clients.write` | Planta (ubicación, código de activación) y su acuerdo de servicio |
+| GET/PATCH | /plants/:id | `clients.read` / `clients.write` | Planta con sus puertas |
+| POST | /plants/:id/gates | `clients.write` | Puerta con QR fijo de llegada |
+| PATCH | /plant-gates/:id, POST /plant-gates/:id/rotate-qr | `clients.write` | Editar, desactivar o rotar el QR |
+| GET/POST | /client-orgs/:id/contacts | `clients.read` / `clients.write` | Contactos por área |
+| PATCH/DELETE | /client-contacts/:id | `clients.write` | Editar o eliminar contacto |
+| GET/POST | /leads | `clients.read` / `clients.write` | Prospectos por etapa |
+| PATCH/DELETE | /leads/:id | `clients.write` | Cambiar etapa (perdido exige motivo) |
+| POST | /leads/:id/convert | `clients.write` | Convertir en empresa cliente con planta y contacto |
+| GET/POST | /contracts | `contracts.read` / `contracts.write` | Contratos |
+| GET/PATCH/DELETE | /contracts/:id | `contracts.read` / `contracts.write` | Contrato con tarifas y penalizaciones |
+| POST | /contracts/:id/rates, PATCH/DELETE /rates/:id | `contracts.write` | Tarifas por viaje, ruta, km, unidad o pasajero, con condiciones |
+| POST | /contracts/:id/penalties, PATCH/DELETE /penalties/:id | `contracts.write` | Penalizaciones (fijas o porcentaje) |
+| POST | /contracts/:id/quote | `contracts.read` | Cotizar un viaje con el motor de tarifas |
+| GET/POST | /plants/:id/invitations | `clients.read` / `clients.write` | Invitar por correo a usuarios de la planta |
+| DELETE | /plant-invitations/:id | `clients.write` | Cancelar invitación |
+| POST | /invitations/accept | — | Aceptar creando la cuenta (la empresa pasa a administrarse sola) |
+| POST | /invitations/accept-existing | `users.manage` (planta) | Aceptar con una cuenta de planta existente (fusiona los datos capturados) |
+
 Las cargas de Excel validan cada fila y devuelven `{ totalRows, created, updated, errors: [{ row, column, message }], applied }`.
 Si hay un solo error no se guarda nada.

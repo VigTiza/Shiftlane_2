@@ -29,7 +29,7 @@ export const auditRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.get(
     '/audit-log',
     {
-      preHandler: requirePermission(app, 'audit.read'),
+      onRequest: requirePermission(app, 'audit.read'),
       schema: {
         tags: ['Auditoría'],
         summary: 'Historial de cambios de la cuenta, del más reciente al más antiguo',

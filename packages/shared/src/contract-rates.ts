@@ -2,7 +2,13 @@
 // incluidas las penalizaciones. Todo en centavos para evitar errores de redondeo.
 // Lo usan la API (conciliación, F12) y el cotizador del panel.
 
-export const RATE_BASES = ['per_trip', 'per_route', 'per_km', 'per_vehicle', 'per_passenger'] as const;
+export const RATE_BASES = [
+  'per_trip',
+  'per_route',
+  'per_km',
+  'per_vehicle',
+  'per_passenger',
+] as const;
 export type RateBasis = (typeof RATE_BASES)[number];
 
 export const RATE_BASIS_LABELS: Record<RateBasis, string> = {
@@ -94,9 +100,16 @@ export function rateMatches(rule: RateRule, trip: TripForPricing): boolean {
   if (rule.routeId && rule.routeId !== trip.routeId) return false;
   if (rule.validFrom && trip.date < rule.validFrom) return false;
   if (rule.validTo && trip.date > rule.validTo) return false;
-  if (rule.weekdays && rule.weekdays.length > 0 && !rule.weekdays.includes(weekdayOf(trip.date))) return false;
-  if (rule.startTime && rule.endTime && !inTimeWindow(trip.time, rule.startTime, rule.endTime)) return false;
-  if (rule.holidays !== null && rule.holidays !== undefined && rule.holidays !== Boolean(trip.isHoliday)) return false;
+  if (rule.weekdays && rule.weekdays.length > 0 && !rule.weekdays.includes(weekdayOf(trip.date)))
+    return false;
+  if (rule.startTime && rule.endTime && !inTimeWindow(trip.time, rule.startTime, rule.endTime))
+    return false;
+  if (
+    rule.holidays !== null &&
+    rule.holidays !== undefined &&
+    rule.holidays !== Boolean(trip.isHoliday)
+  )
+    return false;
   if (rule.minCapacity !== null && rule.minCapacity !== undefined) {
     if (trip.vehicleCapacity === null || trip.vehicleCapacity === undefined) return false;
     if (trip.vehicleCapacity < rule.minCapacity) return false;
@@ -105,8 +118,10 @@ export function rateMatches(rule: RateRule, trip: TripForPricing): boolean {
     if (trip.vehicleCapacity === null || trip.vehicleCapacity === undefined) return false;
     if (trip.vehicleCapacity > rule.maxCapacity) return false;
   }
-  if (rule.basis === 'per_km' && (trip.distanceKm === null || trip.distanceKm === undefined)) return false;
-  if (rule.basis === 'per_passenger' && (trip.passengers === null || trip.passengers === undefined)) return false;
+  if (rule.basis === 'per_km' && (trip.distanceKm === null || trip.distanceKm === undefined))
+    return false;
+  if (rule.basis === 'per_passenger' && (trip.passengers === null || trip.passengers === undefined))
+    return false;
   return true;
 }
 
@@ -212,7 +227,9 @@ export function tripCharge(
     }
     if (!applies) continue;
     const amountCents =
-      penalty.amountType === 'fixed' ? Math.round(penalty.amount) : Math.round((priceCents * penalty.amount) / 100);
+      penalty.amountType === 'fixed'
+        ? Math.round(penalty.amount)
+        : Math.round((priceCents * penalty.amount) / 100);
     applied.push({ penaltyId: penalty.id, type: penalty.type, amountCents });
   }
 

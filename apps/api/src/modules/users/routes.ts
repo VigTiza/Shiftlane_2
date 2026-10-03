@@ -23,7 +23,7 @@ export const userRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.get(
     '/me/permissions',
     {
-      preHandler: requireAuth(app, { kinds: ['user'] }),
+      onRequest: requireAuth(app, { kinds: ['user'] }),
       schema: {
         tags: TAGS,
         summary: 'Roles y permisos efectivos de la sesión',
@@ -39,7 +39,7 @@ export const userRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.get(
     '/users',
     {
-      preHandler: canRead,
+      onRequest: canRead,
       schema: { tags: TAGS, summary: 'Usuarios de la cuenta', response: { 200: usersResponse } },
     },
     (request) => withDbContext(app.db.app, dbContextOf(request), (tx) => service.list(tx)),
@@ -48,7 +48,7 @@ export const userRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.patch(
     '/users/:userId',
     {
-      preHandler: canManage,
+      onRequest: canManage,
       schema: {
         tags: TAGS,
         summary: 'Cambia nombre, teléfono o estado de un usuario',
@@ -66,7 +66,7 @@ export const userRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.put(
     '/users/:userId/roles',
     {
-      preHandler: canManage,
+      onRequest: canManage,
       schema: {
         tags: TAGS,
         summary: 'Reemplaza los roles de un usuario',
@@ -84,7 +84,7 @@ export const userRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   app.put(
     '/users/:userId/permissions',
     {
-      preHandler: canManage,
+      onRequest: canManage,
       schema: {
         tags: TAGS,
         summary: 'Reemplaza los permisos otorgados o quitados a un usuario',
