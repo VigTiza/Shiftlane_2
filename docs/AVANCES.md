@@ -4,7 +4,10 @@
 - Fase actual: F02 — Catálogos
 - Último prompt completado: F02-P01
 - Siguiente prompt: F02-P02 Clientes, plantas, contratos y tarifas
-- Trabajo a medias (si lo hay): ninguno
+- Trabajo a medias (si lo hay): F02-P02. Hecho: motor de tarifas en packages/shared
+  (contract-rates.ts, 16 pruebas) y migración crm (plant_gates, client_contacts, contracts,
+  rates, penalties, leads, plant_invitations) con RLS y auditoría. Falta: módulos de la API
+  (clientes/plantas/puertas/contactos, contratos/tarifas/cotizador, prospectos, invitaciones).
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
   apps/api/.env). Con Docker: `pnpm services:up` (requiere reiniciar la PC una vez).

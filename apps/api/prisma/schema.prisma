@@ -50,6 +50,12 @@ model Tenant {
   vehicles            Vehicle[]
   vehicleDocuments    VehicleDocument[]
   driverDocuments     DriverDocument[]
+  clientContacts      ClientContact[]
+  contracts           Contract[]
+  rates               Rate[]
+  penalties           Penalty[]
+  leads               Lead[]
+  plantInvitations    PlantInvitation[]
 
   @@map("tenants")
 }
@@ -278,6 +284,10 @@ model ClientOrg {
   sessions            Session[]
   serviceAgreements   ServiceAgreement[]
   passengers          Passenger[]
+  gates               PlantGate[]
+  contacts            ClientContact[]
+  contracts           Contract[]
+  invitations         PlantInvitation[]
 
   @@index([createdByTenantId])
   @@map("client_orgs")
@@ -300,6 +310,10 @@ model Plant {
   clientOrg         ClientOrg          @relation(fields: [clientOrgId], references: [id])
   serviceAgreements ServiceAgreement[]
   passengers        Passenger[]
+  gates             PlantGate[]
+  contacts          ClientContact[]
+  contracts         Contract[]
+  invitations       PlantInvitation[]
 
   @@unique([id, clientOrgId])
   @@index([clientOrgId])
@@ -589,4 +603,226 @@ model DriverDocument {
   @@index([tenantId, expiresOn])
   @@index([driverId])
   @@map("driver_documents")
+}
+
+// ---------------------------------------------------------------------------
+// CRM: puertas, contactos, contratos, tarifas, penalizaciones y prospectos
+// ---------------------------------------------------------------------------
+
+/// Puerta de acceso de la planta. Su QR fijo prueba que la unidad llegó (lo escanea el chofer).
+model PlantGate {
+  id          String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientOrgId String                                 @map("client_org_id") @db.Uuid
+  plantId     String                                 @map("plant_id") @db.Uuid
+  name        String
+  qrCode      String                                 @unique @map("qr_code")
+  location    Unsupported("geography(Point, 4326)")?
+  active      Boolean                                @default(true)
+  createdAt   DateTime                               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime                               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?                              @map("deleted_at") @db.Timestamptz(3)
+
+  clientOrg ClientOrg @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
+  plant     Plant     @relation(fields: [plantId, clientOrgId], references: [id, clientOrgId], onDelete: Restrict)
+
+  @@index([plantId])
+  @@map("plant_gates")
+}
+
+enum ContactArea {
+  logistics
+  hr
+  security
+  purchasing
+  finance
+  management
+  other
+}
+
+/// Contacto de una empresa cliente en el CRM de la transportista.
+model ClientContact {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String      @map("tenant_id") @db.Uuid
+  clientOrgId String      @map("client_org_id") @db.Uuid
+  plantId     String?     @map("plant_id") @db.Uuid
+  fullName    String      @map("full_name")
+  area        ContactArea @default(other)
+  position    String?
+  email       String?
+  phone       String?
+  notes       String?
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?   @map("deleted_at") @db.Timestamptz(3)
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  clientOrg ClientOrg @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
+  plant     Plant?    @relation(fields: [plantId, clientOrgId], references: [id, clientOrgId], onDelete: Restrict)
+
+  @@index([tenantId, clientOrgId])
+  @@map("client_contacts")
+}
+
+enum ContractStatus {
+  draft
+  active
+  ended
+}
+
+/// Contrato de servicio entre la transportista y una empresa cliente.
+model Contract {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String         @map("tenant_id") @db.Uuid
+  clientOrgId String         @map("client_org_id") @db.Uuid
+  /// Planta a la que aplica; nulo = todas las plantas atendidas de la empresa.
+  plantId     String?        @map("plant_id") @db.Uuid
+  name        String
+  number      String?
+  status      ContractStatus @default(draft)
+  startsOn    DateTime       @map("starts_on") @db.Date
+  endsOn      DateTime?      @map("ends_on") @db.Date
+  notes       String?
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?      @map("deleted_at") @db.Timestamptz(3)
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  clientOrg ClientOrg @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
+  plant     Plant?    @relation(fields: [plantId, clientOrgId], references: [id, clientOrgId], onDelete: Restrict)
+  rates     Rate[]
+  penalties Penalty[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, clientOrgId])
+  @@map("contracts")
+}
+
+enum RateBasis {
+  per_trip
+  per_route
+  per_km
+  per_vehicle
+  per_passenger
+}
+
+/// Tarifa de un contrato; las condiciones (días, horario, ruta, capacidad) la hacen especial.
+model Rate {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  contractId    String    @map("contract_id") @db.Uuid
+  name          String?
+  basis         RateBasis
+  amount        Decimal   @db.Decimal(12, 2)
+  /// Ruta a la que aplica (la tabla de rutas llega en F03).
+  routeId       String?   @map("route_id") @db.Uuid
+  weekdays      Int[]     @default([])
+  startTime     String?   @map("start_time")
+  endTime       String?   @map("end_time")
+  holidays      Boolean?
+  minCapacity   Int?      @map("min_capacity")
+  maxCapacity   Int?      @map("max_capacity")
+  validFrom     DateTime? @map("valid_from") @db.Date
+  validTo       DateTime? @map("valid_to") @db.Date
+  minimumCharge Decimal?  @map("minimum_charge") @db.Decimal(12, 2)
+  priority      Int       @default(0)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  contract Contract @relation(fields: [contractId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([contractId])
+  @@map("rates")
+}
+
+enum PenaltyType {
+  late_arrival
+  missed_trip
+  incomplete_trip
+  other
+}
+
+enum PenaltyAmountType {
+  fixed
+  percent
+}
+
+model Penalty {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String            @map("tenant_id") @db.Uuid
+  contractId   String            @map("contract_id") @db.Uuid
+  type         PenaltyType
+  description  String?
+  amountType   PenaltyAmountType @map("amount_type")
+  amount       Decimal           @db.Decimal(12, 2)
+  graceMinutes Int?              @map("grace_minutes")
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt    DateTime?         @map("deleted_at") @db.Timestamptz(3)
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  contract Contract @relation(fields: [contractId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([contractId])
+  @@map("penalties")
+}
+
+enum LeadStage {
+  contacted
+  quoted
+  pilot
+  won
+  lost
+}
+
+/// Prospecto en el CRM de la transportista.
+model Lead {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId              String    @map("tenant_id") @db.Uuid
+  companyName           String    @map("company_name")
+  contactName           String?   @map("contact_name")
+  email                 String?
+  phone                 String?
+  stage                 LeadStage @default(contacted)
+  estimatedVehicles     Int?      @map("estimated_vehicles")
+  estimatedMonthlyValue Decimal?  @map("estimated_monthly_value") @db.Decimal(12, 2)
+  lostReason            String?   @map("lost_reason")
+  notes                 String?
+  convertedClientOrgId  String?   @map("converted_client_org_id") @db.Uuid
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt             DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, stage])
+  @@map("leads")
+}
+
+/// Invitación por correo a un usuario de planta. Al aceptarla, la empresa cliente queda con
+/// usuarios propios y el acuerdo de servicio activo.
+model PlantInvitation {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  clientOrgId     String    @map("client_org_id") @db.Uuid
+  plantId         String    @map("plant_id") @db.Uuid
+  email           String
+  fullName        String    @map("full_name")
+  roleKey         String    @map("role_key")
+  tokenHash       String    @unique @map("token_hash")
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(3)
+  acceptedAt      DateTime? @map("accepted_at") @db.Timestamptz(3)
+  acceptedUserId  String?   @map("accepted_user_id") @db.Uuid
+  revokedAt       DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdByUserId String?   @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  clientOrg ClientOrg @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
+  plant     Plant     @relation(fields: [plantId, clientOrgId], references: [id, clientOrgId], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([plantId])
+  @@map("plant_invitations")
 }
