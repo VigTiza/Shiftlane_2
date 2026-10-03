@@ -2,8 +2,8 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F01 — Núcleo del backend
-- Último prompt completado: F01-P01
-- Siguiente prompt: F01-P02 Esquema de base de datos y seguridad por filas
+- Último prompt completado: F01-P02
+- Siguiente prompt: F01-P03 Autenticación y sesiones
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -48,8 +48,32 @@
   (docs/decisiones/0001). Imports con extensión .ts en todo el monorepo.
 - 2026-10-03 Pruebas de la API con PostgreSQL real: base temporal con TEST_DATABASE_URL o
   Testcontainers (docs/decisiones/0002). El CI ya no usa contenedor de servicio.
+- 2026-10-03 Multiempresa (docs/decisiones/0003): rol shiftlane_app sin BYPASSRLS fijado en
+  cada conexión; contexto por transacción con set_config local; empresas cliente y plantas
+  compartidas, visibles por acuerdo de servicio. REVISAR CON EL USUARIO (fase crítica 01).
+- 2026-10-03 Prisma 7.10 con adaptador pg y cliente generado en TypeScript (compatible con
+  ejecutar TS directo en Node). `prisma migrate reset` está bloqueado para agentes: usar
+  `migrate deploy` o recrear la base local a mano.
 
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F01-P02 Esquema de base de datos y seguridad por filas
+- Hecho: esquema Prisma con tenants, users, roles, user_roles, sessions, audit_log,
+  client_orgs, plants (ubicación PostGIS) y service_agreements; todas con created_at,
+  updated_at y deleted_at donde aplica. Migración inicial con PostGIS, rol shiftlane_app,
+  funciones de contexto en el esquema app, RLS y políticas en todas las tablas, disparadores
+  de integridad, catálogo fijo de 11 roles. Capa de datos con db.app (RLS), db.system y
+  withDbContext. Datos de ejemplo idempotentes (prisma/seed.ts).
+- Archivos principales: apps/api/prisma/{schema.prisma,seed.ts,migrations/}, prisma.config.ts,
+  src/lib/db.ts, test/security/tenant-isolation.test.ts, docs/decisiones/0003.
+- Pruebas agregadas / resultado: 23 pruebas de aislamiento (RLS en toda tabla, rol sin
+  bypass, sin contexto no se ve nada, contexto que no se filtra entre transacciones, lectura,
+  SQL sin WHERE, update/delete/insert cruzados, acuerdos y plantas, vista de planta con dos
+  transportistas, escalamiento de roles, bitácora inmutable). 40 pruebas de la API en verde.
+- Problemas encontrados y cómo se resolvieron: recursión entre políticas (funciones SECURITY
+  DEFINER); INSERT RETURNING en client_orgs (condición sobre columnas de la fila); Prisma
+  ocultaba el mensaje del disparador con código FK (se usó insufficient_privilege).
+- Pendiente para después: las tablas de las fases siguientes deben seguir las reglas del ADR.
+
 ### 2026-10-03 — F01-P01 Esqueleto de la API
 - Hecho: Fastify 5 + fastify-type-provider-zod (Zod 4 con mensajes en español). Config de
   entorno validada con Zod (src/config/env.ts), Pino con datos sensibles ocultos, manejador

@@ -7,3 +7,6 @@ apps/driver/
 
 # Markdown escrito a mano o generado por pandoc: no se reformatea.
 *.md
+
+# Código generado
+apps/api/src/generated/

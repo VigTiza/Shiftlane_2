@@ -1,0 +1,258 @@
+// Esquema de Shiftlane. Tablas y columnas en inglés (snake_case en PostgreSQL).
+// La seguridad por filas, los roles y las funciones de contexto viven en las migraciones SQL;
+// ver docs/decisiones/0003-multiempresa-y-seguridad-por-filas.md.
+
+generator client {
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
+  runtime                = "nodejs"
+  moduleFormat           = "esm"
+  generatedFileExtension = "ts"
+  importFileExtension    = "ts"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Cuentas y acceso
+// ---------------------------------------------------------------------------
+
+enum TenantStatus {
+  active
+  suspended
+  cancelled
+}
+
+/// Empresa transportista (cuenta del SaaS).
+model Tenant {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  legalName String?      @map("legal_name")
+  rfc       String?
+  status    TenantStatus @default(active)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime?    @map("deleted_at") @db.Timestamptz(3)
+
+  users             User[]
+  userRoles         UserRole[]
+  sessions          Session[]
+  auditLogs         AuditLog[]
+  serviceAgreements ServiceAgreement[]
+  createdClientOrgs ClientOrg[]        @relation("ClientOrgCreatedBy")
+
+  @@map("tenants")
+}
+
+/// Ámbito al que pertenece un usuario: transportista, planta cliente o plataforma.
+enum UserKind {
+  carrier
+  plant
+  platform
+}
+
+enum UserStatus {
+  invited
+  active
+  disabled
+}
+
+model User {
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kind         UserKind
+  tenantId     String?    @map("tenant_id") @db.Uuid
+  clientOrgId  String?    @map("client_org_id") @db.Uuid
+  email        String     @unique
+  fullName     String     @map("full_name")
+  phone        String?
+  passwordHash String?    @map("password_hash")
+  status       UserStatus @default(active)
+  lastLoginAt  DateTime?  @map("last_login_at") @db.Timestamptz(3)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt    DateTime?  @map("deleted_at") @db.Timestamptz(3)
+
+  tenant    Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  clientOrg ClientOrg? @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
+  roles     UserRole[]
+  sessions  Session[]
+
+  @@index([tenantId])
+  @@index([clientOrgId])
+  @@map("users")
+}
+
+/// Ámbito en el que se puede asignar un rol.
+enum RoleScope {
+  carrier
+  plant
+  platform
+}
+
+/// Catálogo fijo de roles (owner, dispatcher, plant_hr, ...).
+model Role {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key         String    @unique
+  name        String
+  scope       RoleScope
+  description String?
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  userRoles UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  roleId      String   @map("role_id") @db.Uuid
+  /// Copia del ámbito del usuario para que la seguridad por filas no dependa de otra tabla.
+  tenantId    String?  @map("tenant_id") @db.Uuid
+  clientOrgId String?  @map("client_org_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role       @relation(fields: [roleId], references: [id])
+  tenant    Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clientOrg ClientOrg? @relation(fields: [clientOrgId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([tenantId])
+  @@index([clientOrgId])
+  @@map("user_roles")
+}
+
+/// Sesión de un usuario web: guarda el hash del token de renovación (rotativo).
+model Session {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  tenantId         String?   @map("tenant_id") @db.Uuid
+  clientOrgId      String?   @map("client_org_id") @db.Uuid
+  /// Todas las rotaciones de un mismo inicio de sesión comparten familia.
+  familyId         String    @map("family_id") @db.Uuid
+  refreshTokenHash String    @unique @map("refresh_token_hash")
+  userAgent        String?   @map("user_agent")
+  ip               String?
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
+  rotatedAt        DateTime? @map("rotated_at") @db.Timestamptz(3)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant    Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clientOrg ClientOrg? @relation(fields: [clientOrgId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("sessions")
+}
+
+/// Bitácora inmutable de cambios (quién, qué, antes y después).
+model AuditLog {
+  id          BigInt   @id @default(autoincrement())
+  tenantId    String?  @map("tenant_id") @db.Uuid
+  clientOrgId String?  @map("client_org_id") @db.Uuid
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  before      Json?
+  after       Json?
+  requestId   String?  @map("request_id")
+  ip          String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant    Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  clientOrg ClientOrg? @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, createdAt])
+  @@index([clientOrgId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_log")
+}
+
+// ---------------------------------------------------------------------------
+// Clientes: empresas cliente, plantas y acuerdos de servicio
+// ---------------------------------------------------------------------------
+
+/// Empresa cliente (maquila). Es compartida: puede trabajar con varias transportistas.
+model ClientOrg {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name              String
+  legalName         String?   @map("legal_name")
+  rfc               String?
+  /// Transportista que la registró. Puede administrarla mientras no tenga usuarios propios.
+  createdByTenantId String?   @map("created_by_tenant_id") @db.Uuid
+  /// Fecha en que la empresa cliente activó sus propios usuarios.
+  claimedAt         DateTime? @map("claimed_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  createdByTenant   Tenant?            @relation("ClientOrgCreatedBy", fields: [createdByTenantId], references: [id], onDelete: Restrict)
+  plants            Plant[]
+  users             User[]
+  userRoles         UserRole[]
+  sessions          Session[]
+  auditLogs         AuditLog[]
+  serviceAgreements ServiceAgreement[]
+
+  @@index([createdByTenantId])
+  @@map("client_orgs")
+}
+
+model Plant {
+  id          String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientOrgId String                                 @map("client_org_id") @db.Uuid
+  name        String
+  address     String?
+  /// Ubicación de la planta (PostGIS). Se lee y escribe con SQL.
+  location    Unsupported("geography(Point, 4326)")?
+  timezone    String                                 @default("America/Ciudad_Juarez")
+  createdAt   DateTime                               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime                               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?                              @map("deleted_at") @db.Timestamptz(3)
+
+  clientOrg         ClientOrg          @relation(fields: [clientOrgId], references: [id])
+  serviceAgreements ServiceAgreement[]
+
+  @@unique([id, clientOrgId])
+  @@index([clientOrgId])
+  @@map("plants")
+}
+
+enum ServiceAgreementStatus {
+  pending
+  active
+  suspended
+  ended
+}
+
+/// Acuerdo con el que una transportista da servicio a una planta. Es la única vía por la que
+/// una planta ve datos de la transportista.
+model ServiceAgreement {
+  id          String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String                 @map("tenant_id") @db.Uuid
+  clientOrgId String                 @map("client_org_id") @db.Uuid
+  plantId     String                 @map("plant_id") @db.Uuid
+  status      ServiceAgreementStatus @default(active)
+  startsOn    DateTime?              @map("starts_on") @db.Date
+  endsOn      DateTime?              @map("ends_on") @db.Date
+  createdAt   DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?              @map("deleted_at") @db.Timestamptz(3)
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  clientOrg ClientOrg @relation(fields: [clientOrgId], references: [id])
+  plant     Plant     @relation(fields: [plantId, clientOrgId], references: [id, clientOrgId])
+
+  @@unique([tenantId, plantId])
+  @@index([clientOrgId])
+  @@index([plantId])
+  @@map("service_agreements")
+}

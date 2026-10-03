@@ -69,7 +69,8 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
 - `pnpm lint` — ESLint + Prettier (--check) + `dart format` y `flutter analyze` en apps/driver.
 - `pnpm format` — aplica Prettier y `dart format`.
 - `pnpm typecheck` — `tsc --noEmit` en cada paquete TypeScript.
-- `pnpm db:migrate` / `pnpm db:seed` — migraciones y datos de ejemplo (apps/api, desde F01-P02).
+- `pnpm db:migrate` / `pnpm db:seed` — aplica migraciones (`prisma migrate deploy`) y
+  siembra datos de ejemplo en la base de apps/api/.env.
 - `pnpm docs:referencia` — regenera docs/referencia/*.md e indice-de-prompts.md a partir
   de los .docx de docs/referencia/originales/ (requiere pandoc).
 - `pnpm docs:verificar` — comprueba que los Markdown estén completos, el índice al día y
@@ -87,6 +88,15 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
   manejador central da el formato `{ error: { code, message, details? }, requestId }`.
 - Pruebas con Vitest + Supertest; la base real llega con `inject('databaseUrl')` y la app de
   prueba con test/helpers/app.ts (docs/decisiones/0002).
+- Base de datos (docs/decisiones/0003): Prisma 7 (cliente generado en src/generated, no se
+  versiona). `app.db.app` respeta RLS y siempre se usa dentro de
+  `withDbContext(db.app, { tenantId, clientOrgId, userId }, (tx) => ...)`. `app.db.system`
+  se salta RLS: solo autenticación, tareas programadas y consola de plataforma.
+- Tabla nueva = `tenant_id` + `ENABLE ROW LEVEL SECURITY` + políticas `TO shiftlane_app` en
+  la misma migración (la prueba test/security/tenant-isolation.test.ts lo exige).
+- Migración nueva: editar prisma/schema.prisma, `pnpm --filter @shiftlane/api db:migrate:new`,
+  agregar el SQL de RLS al migration.sql generado y aplicar con `db:migrate`.
+  Datos de ejemplo en prisma/seed.ts (`pnpm db:seed`).
 
 ## Configuración compartida
 - tsconfig.base.json (estricto), eslint.config.mjs (typescript-eslint con tipos),

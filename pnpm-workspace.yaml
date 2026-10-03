@@ -22,6 +22,8 @@ minimumReleaseAgeExclude:
 # Scripts de instalación: solo se permiten los que se aprueban explícitamente.
 # Los de Testcontainers (ssh2 y sus binarios opcionales) no hacen falta.
 allowBuilds:
+  '@prisma/engines': true
   cpu-features: false
+  prisma: true
   protobufjs: false
   ssh2: false

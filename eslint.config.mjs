@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/', '**/coverage/', 'apps/driver/', 'assets/', 'docs/'],
+    ignores: ['**/dist/', '**/coverage/', '**/generated/', 'apps/driver/', 'assets/', 'docs/'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

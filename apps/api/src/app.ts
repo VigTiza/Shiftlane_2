@@ -15,16 +15,16 @@ import {
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 
 import type { Env } from './config/env.ts';
-import { createPool } from './lib/db.ts';
-import type { DbPool } from './lib/db.ts';
+import { createDatabase } from './lib/db.ts';
+import type { Database } from './lib/db.ts';
 import { AppError } from './lib/errors.ts';
 import { healthRoutes } from './modules/health/routes.ts';
 import { errorHandlerPlugin } from './plugins/error-handler.ts';
 
 export interface BuildAppOptions {
   env: Env;
-  /** Pool de base de datos ya creado; si no se pasa, la app crea uno y lo cierra al terminar. */
-  db?: DbPool;
+  /** Conexión ya creada; si no se pasa, la app crea una y la cierra al terminar. */
+  db?: Database;
 }
 
 function loggerOptions(env: Env): FastifyServerOptions['logger'] {
@@ -48,11 +48,11 @@ export async function buildApp({ env, db }: BuildAppOptions) {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
-  const pool = db ?? createPool(env.DATABASE_URL);
+  const database = db ?? createDatabase(env.DATABASE_URL);
   app.decorate('config', env);
-  app.decorate('db', pool);
+  app.decorate('db', database);
   if (!db) {
-    app.addHook('onClose', async () => pool.end());
+    app.addHook('onClose', async () => database.close());
   }
 
   app.addHook('onSend', async (request, reply) => {
