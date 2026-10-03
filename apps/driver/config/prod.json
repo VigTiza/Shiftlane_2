@@ -1,0 +1,5 @@
+{
+  "SHIFTLANE_ENV": "prod",
+  "SHIFTLANE_API_URL": "https://api.shiftlane.mx",
+  "SHIFTLANE_LOCATION_INTERVAL": "12"
+}

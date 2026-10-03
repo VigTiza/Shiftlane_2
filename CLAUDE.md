@@ -134,6 +134,16 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
   agregar el SQL de RLS al migration.sql generado y aplicar con `db:migrate`.
   Datos de ejemplo en prisma/seed.ts (`pnpm db:seed`).
 
+## App del chofer (apps/driver)
+- Capas: lib/core (configuración, registros, errores AppFailure en español, ApiClient con dio,
+  tema, go_router), lib/data (drift: lib/data/local/app_database.dart), lib/domain,
+  lib/application (servicios y proveedores de Riverpod en providers.dart), lib/presentation.
+- Ambientes: `flutter run --dart-define-from-file=config/dev.json` (staging.json, prod.json);
+  dev apunta a la API local desde el emulador (10.0.2.2:3000).
+- Tras cambiar tablas de drift: `dart run build_runner build --delete-conflicting-outputs`
+  (los *.g.dart se versionan porque el CI no corre build_runner).
+- Pruebas: `flutter test`; la base de drift en pruebas es `AppDatabase(NativeDatabase.memory())`.
+
 ## Configuración compartida
 - tsconfig.base.json (estricto), eslint.config.mjs (typescript-eslint con tipos),
   .prettierrc.json. Versiones comunes en `catalog:` de pnpm-workspace.yaml.

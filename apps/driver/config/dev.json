@@ -1,0 +1,5 @@
+{
+  "SHIFTLANE_ENV": "dev",
+  "SHIFTLANE_API_URL": "http://10.0.2.2:3000",
+  "SHIFTLANE_LOCATION_INTERVAL": "12"
+}

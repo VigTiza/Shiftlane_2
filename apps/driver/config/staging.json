@@ -1,0 +1,5 @@
+{
+  "SHIFTLANE_ENV": "staging",
+  "SHIFTLANE_API_URL": "https://api.staging.shiftlane.mx",
+  "SHIFTLANE_LOCATION_INTERVAL": "12"
+}

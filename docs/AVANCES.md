@@ -2,8 +2,8 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F07 — App del chofer (Flutter)
-- Último prompt completado: F06-P03 Simulador de flota (fase F06 terminada)
-- Siguiente prompt: F07-P01 Proyecto Flutter y arquitectura
+- Último prompt completado: F07-P01 Proyecto Flutter y arquitectura
+- Siguiente prompt: F07-P02 Acceso con QR y PIN
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -162,7 +162,25 @@
   endpoints que la app) y crea su propia empresa en cada corrida para no mezclarse con datos
   reales. Los tokens de sus choferes duran todo el turno.
 
+- 2026-10-03 App del chofer por capas con Riverpod 3 (Notifier en lugar de StateProvider),
+  go_router, dio y drift. Ambientes con --dart-define-from-file (config/*.json sin secretos).
+  Cola local (outbox_events) desde el inicio: todo evento pasa por ella con su UUID.
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F07-P01 Proyecto Flutter y arquitectura
+- Hecho: apps/driver con capas core/data/domain/application/presentation; configuración de
+  ambientes dev/staging/prod; registros con búfer para soporte; errores de la API traducidos
+  al español (AppFailure); ApiClient con token; tema Shiftlane (botones de 56 px o más, alto
+  contraste); go_router; drift con la cola de eventos (OutboxService/DriftOutboxRepository);
+  pantalla principal con los 3 botones (se activan en F07-P04).
+- Archivos principales: apps/driver/lib/**, apps/driver/config/*.json, apps/driver/test/**.
+- Pruebas agregadas / resultado: 14 en Flutter (ambientes, errores, cliente con token,
+  registros, tamaño de botones, cola local en memoria, arranque de la app); flutter analyze
+  sin advertencias.
+- Problemas encontrados y cómo se resolvieron: Riverpod 3 movió StateProvider a «legacy»
+  (se usa Notifier); dio agregó transformTimeout (se trata como sin conexión).
+- Pendiente para después: instalar el SDK de Android para compilar el APK (F07-P07).
+
 ### 2026-10-03 — F06-P03 Simulador de flota
 - Hecho: apps/api/scripts/simulator (plan determinista con semilla, preparación de la
   empresa, rutas por la API, choferes, unidades, pasajeros y viajes; turno con checklist,
