@@ -183,6 +183,19 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 | GET | /provisional-badges | `plant.employees` o `passengers.read` | Gafetes provisionales |
 | POST | /provisional-badges/:id/resolve, /dismiss | `plant.employees` | Asignar a un empleado o descartar |
 
+| GET/POST | /shifts | `routes.read` / `routes.write` o `settings.manage` | Turnos de las plantas atendidas |
+| PATCH | /shifts/:id | `routes.write` o `settings.manage` | Editar o desactivar turno |
+| GET/POST | /routes | `routes.read` / `routes.write` | Rutas con su versión vigente; alta con primera versión |
+| GET/PATCH/DELETE | /routes/:id | `routes.read` / `routes.write` | Historial de versiones y cambios temporales; datos generales |
+| GET | /routes/:id/effective?date= | `routes.read` | Versión que aplica en una fecha (incluye cambios temporales) |
+| POST | /routes/:id/versions | `routes.write` | Versión nueva desde hoy o una fecha futura |
+| GET/DELETE | /routes/:id/versions/:versionId | `routes.read` / `routes.write` | Detalle (paradas, horarios, trazo GeoJSON); eliminar solo futuras |
+| POST | /routes/:id/versions/:versionId/restore | `routes.write` | Restaurar una versión anterior como nueva |
+
+Vigencia de rutas: la versión regular aplica desde su `validFrom` hasta que empieza otra;
+un cambio temporal vigente gana a la versión regular. Las versiones que ya empezaron no se
+modifican (un cambio crea otra versión) y no se crean versiones en el pasado.
+
 Credencial QR del pasajero: `SL1.<datos en base64url>.<firma Ed25519>`; los datos llevan
 credencial, pasajero, empresa y un valor aleatorio que cambia al reemitirla.
 

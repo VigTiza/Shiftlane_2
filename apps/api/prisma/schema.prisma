@@ -56,6 +56,12 @@ model Tenant {
   penalties           Penalty[]
   leads               Lead[]
   plantInvitations    PlantInvitation[]
+  shifts              Shift[]
+  routes              Route[]
+  routeVersions       RouteVersion[]
+  stops               Stop[]
+  routeStopTimes      RouteStopTime[]
+  temporaryChanges    TemporaryChange[]
 
   @@map("tenants")
 }
@@ -319,6 +325,8 @@ model Plant {
   invitations       PlantInvitation[]
   provisionalBadges ProvisionalBadge[]
   passengerImports  PassengerImport[]
+  shifts            Shift[]
+  routes            Route[]
 
   @@unique([id, clientOrgId])
   @@index([clientOrgId])
@@ -740,6 +748,7 @@ model Rate {
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   contract Contract @relation(fields: [contractId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  route    Route?   @relation(fields: [routeId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@index([contractId])
   @@map("rates")
@@ -942,4 +951,164 @@ model PassengerImport {
 
   @@index([clientOrgId, createdAt])
   @@map("passenger_imports")
+}
+
+// ---------------------------------------------------------------------------
+// Turnos y rutas
+// ---------------------------------------------------------------------------
+
+/// Turno de una planta atendida por la transportista (F04 agrega calendario y días).
+model Shift {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  plantId   String    @map("plant_id") @db.Uuid
+  name      String
+  /// Hora de entrada a planta HH:MM.
+  startsAt  String    @map("starts_at")
+  /// Hora de salida de planta HH:MM.
+  endsAt    String    @map("ends_at")
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  plant  Plant   @relation(fields: [plantId], references: [id], onDelete: Restrict)
+  routes Route[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, plantId, name])
+  @@map("shifts")
+}
+
+enum RouteDirection {
+  /// Hacia la planta (entrada al turno).
+  inbound
+  /// Desde la planta (salida del turno).
+  outbound
+}
+
+model Route {
+  id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String         @map("tenant_id") @db.Uuid
+  plantId   String         @map("plant_id") @db.Uuid
+  shiftId   String?        @map("shift_id") @db.Uuid
+  code      String
+  name      String
+  direction RouteDirection
+  active    Boolean        @default(true)
+  notes     String?
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime?      @map("deleted_at") @db.Timestamptz(3)
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  plant            Plant             @relation(fields: [plantId], references: [id], onDelete: Restrict)
+  shift            Shift?            @relation(fields: [shiftId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  versions         RouteVersion[]
+  temporaryChanges TemporaryChange[]
+  rates            Rate[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, code])
+  @@index([tenantId, plantId])
+  @@map("routes")
+}
+
+enum RouteVersionKind {
+  regular
+  temporary
+}
+
+/// Versión de una ruta (paradas, horarios y trazo). Las regulares aplican desde valid_from
+/// hasta que empieza otra; las temporales solo dentro de su cambio temporal.
+model RouteVersion {
+  id              String                                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String                                      @map("tenant_id") @db.Uuid
+  routeId         String                                      @map("route_id") @db.Uuid
+  number          Int
+  kind            RouteVersionKind                            @default(regular)
+  validFrom       DateTime                                    @map("valid_from") @db.Date
+  path            Unsupported("geography(LineString, 4326)")?
+  distanceKm      Decimal?                                    @map("distance_km") @db.Decimal(8, 2)
+  durationMinutes Int?                                        @map("duration_minutes")
+  notes           String?
+  /// Versión de la que se copió (al restaurar o derivar).
+  basedOnId       String?                                     @map("based_on_id") @db.Uuid
+  createdByUserId String?                                     @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime                                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt       DateTime?                                   @map("deleted_at") @db.Timestamptz(3)
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  route            Route             @relation(fields: [routeId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  stops            Stop[]
+  temporaryChanges TemporaryChange[]
+
+  @@unique([id, tenantId])
+  @@unique([routeId, number])
+  @@index([routeId, validFrom])
+  @@map("route_versions")
+}
+
+/// Parada de una versión de ruta. stop_key se conserva entre versiones de la misma parada.
+model Stop {
+  id             String                                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String                                @map("tenant_id") @db.Uuid
+  routeVersionId String                                @map("route_version_id") @db.Uuid
+  stopKey        String                                @default(dbgenerated("gen_random_uuid()")) @map("stop_key") @db.Uuid
+  sequence       Int
+  name           String
+  address        String?
+  location       Unsupported("geography(Point, 4326)")
+  /// Radio de la geocerca para detectar la llegada (metros).
+  radiusMeters   Int                                   @default(80) @map("radius_meters")
+  notes          String?
+
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  routeVersion RouteVersion    @relation(fields: [routeVersionId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  times        RouteStopTime[]
+
+  @@unique([id, tenantId])
+  @@unique([routeVersionId, sequence])
+  @@index([routeVersionId])
+  @@map("stops")
+}
+
+/// Horario programado de una parada; puede variar por día de la semana.
+model RouteStopTime {
+  id       String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  stopId   String @map("stop_id") @db.Uuid
+  /// Días de la semana (0 = domingo). Vacío = todos los días.
+  weekdays Int[]  @default([])
+  /// HH:MM
+  time     String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  stop   Stop   @relation(fields: [stopId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([stopId])
+  @@map("route_stop_times")
+}
+
+/// Cambio de ruta entre dos fechas; al terminar vuelve sola la versión normal (F03-P03).
+model TemporaryChange {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  routeId         String    @map("route_id") @db.Uuid
+  routeVersionId  String    @map("route_version_id") @db.Uuid
+  startsOn        DateTime  @map("starts_on") @db.Date
+  endsOn          DateTime  @map("ends_on") @db.Date
+  reason          String
+  cancelledAt     DateTime? @map("cancelled_at") @db.Timestamptz(3)
+  createdByUserId String?   @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  route        Route        @relation(fields: [routeId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  routeVersion RouteVersion @relation(fields: [routeVersionId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@index([routeId, startsOn])
+  @@map("temporary_changes")
 }

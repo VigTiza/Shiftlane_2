@@ -89,7 +89,8 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
 - Pruebas con Vitest + Supertest; la base real llega con `inject('databaseUrl')` y la app de
   prueba con test/helpers/app.ts (docs/decisiones/0002). Datos con test/helpers/fixtures.ts.
   Nunca poner `await` dentro de una cadena de Supertest (obtener tokens antes): rompe el
-  servidor efímero con "Cannot read properties of null (reading 'address')".
+  servidor efímero con "Cannot read properties of null (reading 'address')". Los helpers que
+  devuelven una petición de Supertest no deben ser `async` (se pierde `.expect`).
 - Base de datos (docs/decisiones/0003): Prisma 7 (cliente generado en src/generated, no se
   versiona). `app.db.app` respeta RLS y siempre se usa dentro de
   `withDbContext(db.app, { tenantId, clientOrgId, userId }, (tx) => ...)`. `app.db.system`

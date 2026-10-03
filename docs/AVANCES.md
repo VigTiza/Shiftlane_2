@@ -2,8 +2,8 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F03 — Rutas y paradas
-- Último prompt completado: F02-P03 (fase F02 terminada)
-- Siguiente prompt: F03-P01 Modelo de rutas con PostGIS
+- Último prompt completado: F03-P01
+- Siguiente prompt: F03-P02 Cálculos geográficos
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -77,8 +77,31 @@
   del chofer verificará sin señal con /credentials/public-key. Carga de empleados en dos
   pasos (vista previa guardada y aplicación recalculada, todo o nada); las filas se borran al
   aplicar o descartar. passenger_imports no se audita (datos personales).
+- 2026-10-03 Rutas versionadas por fecha (valid_from); las versiones vigentes o pasadas son
+  inmutables; cambios temporales = versión alterna entre dos fechas (gana a la regular).
+  Paradas con stop_key estable entre versiones. Una transportista nunca ve rutas ni turnos de
+  otra en la misma planta; la planta ve las de sus transportistas. La auditoría omite el trazo
+  PostGIS (app.enable_audit acepta columnas omitidas).
 
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F03-P01 Modelo de rutas con PostGIS
+- Hecho: lógica pura de vigencia (versioning.ts: versión efectiva por fecha con cambios
+  temporales; horario de parada por día). Migración routes: shifts, routes (sentido, planta,
+  turno), route_versions (trazo LineString, distancia calculada por PostGIS), stops (punto,
+  geocerca, stop_key), route_stop_times (variantes por día), temporary_changes; llave foránea
+  de rates.route_id. RLS por transportista con visibilidad para la planta; auditoría con
+  columnas omitidas. Módulo routes: turnos, CRUD de rutas, versiones (crear, ver, eliminar
+  futuras, restaurar), versión vigente por fecha.
+- Archivos principales: apps/api/src/modules/routes/*, prisma/migrations/*_routes.
+- Pruebas agregadas / resultado: 6 unitarias de vigencia y 11 de integración (alta con
+  distancia, horarios en orden, claves, plantas sin acuerdo, versiones futuras, pasado,
+  eliminar, restaurar con stop_key, cambio temporal, turnos, aislamiento entre
+  transportistas en la misma planta y visibilidad para la planta). 203 pruebas de la API.
+- Problemas encontrados y cómo se resolvieron: Prisma no inserta columnas PostGIS
+  obligatorias (paradas con SQL parametrizado); helper de prueba async (nota en CLAUDE.md).
+- Pendiente para después: asignación de pasajeros a paradas (por stop_key) cuando la
+  necesite la programación (F04) o el editor (F08-P03).
+
 ### 2026-10-03 — F02-P03 Pasajeros y credenciales
 - Hecho: migración passengers (turno y teléfono en passengers; passenger_credentials,
   provisional_badges y passenger_imports) con RLS y auditoría. Firmado Ed25519 de

@@ -9,6 +9,9 @@ const PASSWORD = 'Transporte2026';
 
 /** Tablas que no se auditan a propósito. Toda tabla nueva debe auditarse o agregarse aquí. */
 const AUDIT_EXEMPT = [
+  'route_stop_times',
+  'stops',
+
   'audit_log',
   'passenger_imports',
   'password_reset_tokens',
