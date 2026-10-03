@@ -55,6 +55,8 @@ export const routeRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
   /** Después de cada cambio, ajusta los viajes ya generados en la misma transacción. */
   async function refreshTrips(tx: DbTransaction, request: FastifyRequest, routeId: string) {
     await app.schedule.refreshRoutes(tx, tenantIdOf(request), [routeId]);
+    // El chofer y los pasajeros ven el cambio (solo si la transacción se confirma).
+    app.events.publish({ type: 'route.changed', routeId });
   }
   const canRead = requirePermission(app, 'routes.read');
   const canWrite = requirePermission(app, 'routes.write');

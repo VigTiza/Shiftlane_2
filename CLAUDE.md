@@ -100,6 +100,9 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
 - Tareas programadas en src/jobs: idempotentes, una transacción por transportista con
   `pg_try_advisory_xact_lock` (varias copias de la API no se pisan). Se activan con
   SCHEDULER_ENABLED (apagadas con NODE_ENV=test; en pruebas se llaman directo).
+- Eventos: `app.events.publish({ type, ... })` dentro de la transacción (se entregan solo si
+  se confirma y la petición responde sin error); src/realtime/server.ts los envía por
+  Socket.IO a las salas tenant/planta/ruta/chofer.
 - Viajes regulares: cualquier cambio que afecte la programación (rutas, versiones, turnos,
   festivos, cambios temporales) llama a `app.schedule.refresh*` en la misma transacción.
 - Autorización por acción (docs/api.md): rutas de usuarios web con

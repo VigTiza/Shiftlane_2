@@ -72,6 +72,7 @@ export const tripRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
     routes,
     liveStore: app.liveStore,
     averageSpeedKmh: app.config.ROUTING_AVERAGE_SPEED_KMH,
+    events: app.events,
   });
   const driver = createDriverTripsService({
     passengers: createPassengersService({ signer: app.credentialSigner }),
@@ -80,6 +81,7 @@ export const tripRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
     system: app.db.system,
     timeZone: app.config.DEFAULT_TIME_ZONE,
     liveStore: app.liveStore,
+    events: app.events,
   });
   const panel = createTripPanelService({ schedule: app.schedule, storage: app.storage });
   const driverOnly = requireAuth(app, { kinds: ['driver'] });

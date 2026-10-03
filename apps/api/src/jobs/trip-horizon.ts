@@ -1,12 +1,14 @@
 import { addDays, todayIn } from '@shiftlane/shared';
 import type { FastifyBaseLogger } from 'fastify';
 
+import { withAfterCommit } from '../lib/after-commit.ts';
 import type { DbClient } from '../lib/db.ts';
+import type { DomainEvents } from '../lib/domain-events.ts';
 import { autoAssign } from '../modules/schedule/assignments.ts';
 import { generateTrips } from '../modules/schedule/generator.ts';
 import type { GenerationResult } from '../modules/schedule/generator.ts';
 
-export interface TripHorizonRun extends GenerationResult {
+export interface TripHorizonRun extends Omit<GenerationResult, 'cancelledTrips'> {
   from: string;
   to: string;
   tenants: number;
@@ -28,6 +30,8 @@ export async function ensureTripHorizon(
     log?: FastifyBaseLogger;
     /** Limita la corrida a estas transportistas (soporte y pruebas). */
     tenantIds?: string[];
+    /** Para avisar de los viajes cancelados. */
+    events?: DomainEvents;
   },
 ): Promise<TripHorizonRun> {
   const today = todayIn(options.timeZone);
@@ -57,16 +61,25 @@ export async function ensureTripHorizon(
   };
   for (const tenant of tenants) {
     try {
-      const result = await db.$transaction(
-        async (tx) => {
-          const [lock] = await tx.$queryRaw<{ locked: boolean }[]>`
-            SELECT pg_try_advisory_xact_lock(hashtext(${`trip-horizon:${tenant.id}`})) AS locked`;
-          if (!lock?.locked) return null;
-          const generated = await generateTrips(tx, { tenantId: tenant.id, from, to });
-          const assignment = await autoAssign(tx, tenant.id, { from, to });
-          return { ...generated, assigned: assignment.assigned };
-        },
-        { timeout: 120_000 },
+      const result = await withAfterCommit(() =>
+        db.$transaction(
+          async (tx) => {
+            const [lock] = await tx.$queryRaw<{ locked: boolean }[]>`
+              SELECT pg_try_advisory_xact_lock(hashtext(${`trip-horizon:${tenant.id}`})) AS locked`;
+            if (!lock?.locked) return null;
+            const generated = await generateTrips(tx, { tenantId: tenant.id, from, to });
+            for (const trip of generated.cancelledTrips) {
+              options.events?.publish({
+                type: 'trip.cancelled',
+                tripId: trip.id,
+                reason: trip.reason,
+              });
+            }
+            const assignment = await autoAssign(tx, tenant.id, { from, to });
+            return { ...generated, assigned: assignment.assigned };
+          },
+          { timeout: 120_000 },
+        ),
       );
       if (!result) {
         run.skipped += 1;

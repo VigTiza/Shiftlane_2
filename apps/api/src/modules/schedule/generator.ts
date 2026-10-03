@@ -17,6 +17,8 @@ export interface GenerationResult {
   updated: number;
   cancelled: number;
   unchanged: number;
+  /** Viajes que se cancelaron en esta corrida (para avisar al chofer y a los pasajeros). */
+  cancelledTrips: { id: string; reason: string }[];
 }
 
 interface DesiredTrip {
@@ -49,7 +51,13 @@ export async function generateTrips(
   db: Db,
   params: { tenantId: string; from: string; to: string; routeIds?: string[] },
 ): Promise<GenerationResult> {
-  const result: GenerationResult = { created: 0, updated: 0, cancelled: 0, unchanged: 0 };
+  const result: GenerationResult = {
+    created: 0,
+    updated: 0,
+    cancelled: 0,
+    unchanged: 0,
+    cancelledTrips: [],
+  };
   const routes = await db.route.findMany({
     where: {
       tenantId: params.tenantId,
@@ -151,6 +159,7 @@ export async function generateTrips(
             data: { status: 'cancelled', cancelReason: AUTO_CANCEL_PREFIX + decision.skip },
           });
           result.cancelled += 1;
+          result.cancelledTrips.push({ id: current.id, reason: decision.skip });
         } else if (current) {
           result.unchanged += 1;
         }

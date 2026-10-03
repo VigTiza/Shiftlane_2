@@ -4,6 +4,7 @@ import type { DbTransaction } from '../../lib/db.ts';
 import { AppError, BadRequestError, ConflictError, NotFoundError } from '../../lib/errors.ts';
 import { fromDbDate, toDbDate } from '../../lib/http-schemas.ts';
 import { isUniqueViolation } from '../../lib/prisma-errors.ts';
+import type { DomainEvents } from '../../lib/domain-events.ts';
 import type { Holiday, Prisma } from '../../generated/prisma/client.ts';
 import { datesBetween } from '../routes/versioning.ts';
 import {
@@ -38,7 +39,21 @@ function mapHoliday(holiday: Holiday) {
  * cambio que afecta la programación (rutas, turnos, festivos, cambios temporales) llama a
  * refresh* para que los viajes ya generados reflejen el cambio en la misma transacción.
  */
-export function createScheduleService(deps: { horizonDays: number; timeZone: string }) {
+export function createScheduleService(deps: {
+  horizonDays: number;
+  timeZone: string;
+  events?: DomainEvents;
+}) {
+  /** Avisa al chofer y a los pasajeros de los viajes que la regeneración canceló. */
+  function announce<T extends { cancelledTrips: { id: string; reason: string }[] } | null>(
+    result: T,
+  ): T {
+    for (const trip of result?.cancelledTrips ?? []) {
+      deps.events?.publish({ type: 'trip.cancelled', tripId: trip.id, reason: trip.reason });
+    }
+    return result;
+  }
+
   /** Fin del horizonte: los 14 días de la tarea diaria o lo que ya se haya generado de más. */
   async function horizonEnd(tx: DbTransaction, tenantId: string, routeIds?: string[]) {
     const horizon = addDays(todayIn(deps.timeZone), deps.horizonDays - 1);
@@ -60,7 +75,7 @@ export function createScheduleService(deps: { horizonDays: number; timeZone: str
     if (routeIds.length === 0) return null;
     const from = horizonStart();
     const to = await horizonEnd(tx, tenantId, routeIds);
-    const result = await generateTrips(tx, { tenantId, from, to, routeIds });
+    const result = announce(await generateTrips(tx, { tenantId, from, to, routeIds }));
     // Chofer y unidad habituales para los viajes nuevos (o si cambiaron en la ruta).
     await autoAssign(tx, tenantId, { from, to, routeIds });
     return result;
@@ -77,12 +92,14 @@ export function createScheduleService(deps: { horizonDays: number; timeZone: str
     const routes = plantId
       ? await tx.route.findMany({ where: { tenantId, plantId }, select: { id: true } })
       : undefined;
-    return generateTrips(tx, {
-      tenantId,
-      from: date,
-      to: date,
-      routeIds: routes?.map((r) => r.id),
-    });
+    return announce(
+      await generateTrips(tx, {
+        tenantId,
+        from: date,
+        to: date,
+        routeIds: routes?.map((r) => r.id),
+      }),
+    );
   }
 
   return {
@@ -106,7 +123,7 @@ export function createScheduleService(deps: { horizonDays: number; timeZone: str
           `Se pueden generar como máximo ${MAX_GENERATION_DAYS} días a la vez.`,
         );
       }
-      const result = await generateTrips(tx, { tenantId, from, to });
+      const result = announce(await generateTrips(tx, { tenantId, from, to }));
       const assignment = await autoAssign(tx, tenantId, { from, to });
       return { from, to, ...result, assigned: assignment.assigned };
     },
@@ -149,6 +166,7 @@ export function createScheduleService(deps: { horizonDays: number; timeZone: str
 
     async cancel(tx: DbTransaction, tenantId: string, tripId: string, reason: string) {
       await cancelTrip(tx, tenantId, tripId, reason);
+      deps.events?.publish({ type: 'trip.cancelled', tripId, reason });
       return this.tripSummary(tx, tripId);
     },
 
@@ -242,12 +260,14 @@ export function createScheduleService(deps: { horizonDays: number; timeZone: str
         throw new BadRequestError('La semana destino debe ser distinta de la semana origen.');
       }
       const routeIds = input.routeId ? [input.routeId] : undefined;
-      const generated = await generateTrips(tx, {
-        tenantId,
-        from: targetStart,
-        to: addDays(targetStart, 6),
-        routeIds,
-      });
+      const generated = announce(
+        await generateTrips(tx, {
+          tenantId,
+          from: targetStart,
+          to: addDays(targetStart, 6),
+          routeIds,
+        }),
+      );
       const result = await copyWeek(tx, tenantId, userId, {
         sourceStart: input.sourceWeekStart,
         targetStart,

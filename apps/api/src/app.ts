@@ -22,7 +22,9 @@ import { createCipher } from './lib/crypto.ts';
 import { ensureUpcomingPartitions } from './jobs/position-partitions.ts';
 import { createDailyScheduler } from './jobs/scheduler.ts';
 import { ensureTripHorizon } from './jobs/trip-horizon.ts';
+import { flushRequestScope, runInRequestScope } from './lib/after-commit.ts';
 import { createDatabase } from './lib/db.ts';
+import { createDomainEvents } from './lib/domain-events.ts';
 import {
   createMemoryLiveStore,
   createRedisLiveStore,
@@ -61,6 +63,7 @@ import { requestRoutes } from './modules/requests/routes.ts';
 import { routeRoutes } from './modules/routes/routes.ts';
 import { syncRoutes } from './modules/sync/routes.ts';
 import { tripRoutes } from './modules/trips/routes.ts';
+import { createRealtime } from './realtime/server.ts';
 import { scheduleRoutes } from './modules/schedule/routes.ts';
 import { createScheduleService } from './modules/schedule/service.ts';
 import { userRoutes } from './modules/users/routes.ts';
@@ -166,9 +169,43 @@ export async function buildApp({ env, db, mailer, storage, routing, liveStore }:
       : createMemoryLiveStore(env.LIVE_POSITION_TTL_SECONDS));
   app.decorate('liveStore', createResilientLiveStore(live, app.log));
   app.addHook('onClose', async () => live.close());
+
+  // Eventos de dominio: se entregan solo si la transacción se confirma y la petición responde
+  // sin error.
+  const events = createDomainEvents();
+  app.decorate('events', events);
+  // Se asigna en cada petición (no se comparte un arreglo entre peticiones).
+  app.decorateRequest('afterCommit', null as unknown as (() => void)[]);
+  app.addHook('onRequest', (request, _reply, done) => {
+    request.afterCommit = [];
+    runInRequestScope(request.afterCommit, done);
+  });
+  app.addHook('onResponse', (request, reply, done) => {
+    flushRequestScope(request.afterCommit, reply.statusCode < 400);
+    done();
+  });
+  const realtime = createRealtime({
+    server: app.server,
+    db: database,
+    tokens,
+    events,
+    liveStore: app.liveStore,
+    corsOrigins: env.CORS_ORIGINS,
+    redisUrl: env.REDIS_URL,
+    log: app.log,
+  });
+  app.decorate('realtime', realtime);
+  app.addHook('onClose', (_instance, done) => {
+    realtime.close();
+    done();
+  });
   app.decorate(
     'schedule',
-    createScheduleService({ horizonDays: env.TRIP_HORIZON_DAYS, timeZone: env.DEFAULT_TIME_ZONE }),
+    createScheduleService({
+      horizonDays: env.TRIP_HORIZON_DAYS,
+      timeZone: env.DEFAULT_TIME_ZONE,
+      events,
+    }),
   );
   if (env.SCHEDULER_ENABLED ?? env.NODE_ENV !== 'test') {
     const scheduler = createDailyScheduler({
@@ -189,6 +226,7 @@ export async function buildApp({ env, db, mailer, storage, routing, liveStore }:
               horizonDays: env.TRIP_HORIZON_DAYS,
               timeZone: env.DEFAULT_TIME_ZONE,
               log: app.log,
+              events,
             })),
           }),
         },

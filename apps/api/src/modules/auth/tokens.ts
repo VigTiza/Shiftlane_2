@@ -76,6 +76,20 @@ export function createTokenService(options: { secret: string; accessTtlSeconds: 
       }
     },
 
+    /** Como verifyAccess, pero también dice cuándo expira (para cerrar sockets a tiempo). */
+    async verifyAccessWithExpiry(
+      token: string,
+    ): Promise<{ claims: AccessClaims; expiresAt: Date } | null> {
+      try {
+        const payload = await verify(token, 'access');
+        const parsed = accessClaimsSchema.safeParse(payload);
+        if (!parsed.success || typeof payload.exp !== 'number') return null;
+        return { claims: parsed.data, expiresAt: new Date(payload.exp * 1000) };
+      } catch {
+        return null;
+      }
+    },
+
     signTwoFactorChallenge(userId: string): Promise<string> {
       return sign({ purpose: '2fa', sub: userId }, '2fa', 300);
     },

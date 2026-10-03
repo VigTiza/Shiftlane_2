@@ -4,6 +4,7 @@ import type { DbClient, DbTransaction } from '../../lib/db.ts';
 import { BadRequestError, ConflictError, NotFoundError } from '../../lib/errors.ts';
 import { fromDbDate } from '../../lib/http-schemas.ts';
 import { isUniqueViolation } from '../../lib/prisma-errors.ts';
+import type { DomainEvents } from '../../lib/domain-events.ts';
 import type { LiveStore } from '../../lib/live-store.ts';
 import type { ObjectStorage } from '../../lib/storage.ts';
 import type { UploadedFile } from '../../lib/uploads.ts';
@@ -124,6 +125,8 @@ export function createDriverTripsService(deps: {
   timeZone: string;
   /** Al terminar el viaje se borra su posición en vivo. */
   liveStore?: LiveStore;
+  /** Avisos en tiempo real (inicio, fin y abordajes). */
+  events?: DomainEvents;
 }) {
   const { passengers, routes, storage } = deps;
 
@@ -455,6 +458,7 @@ export function createDriverTripsService(deps: {
       await record(tx, trip, 'started', { type: 'driver', id: session.driverId }, input, {
         checklistResultId: checklist.id,
       });
+      deps.events?.publish({ type: 'trip.status_changed', tripId: trip.id });
       return state(tx, tripId);
     },
 
@@ -650,13 +654,25 @@ export function createDriverTripsService(deps: {
       }
       const overCapacityNote =
         capacity !== null && (await tx.boarding.count({ where: { tripId } })) > capacity;
-      return respond(
+      const response = await respond(
         result,
         overCapacityNote ? `${message} Sobrecupo: avisa al despachador.` : message,
         {
           stop: nearest ? { id: nearest.id, name: nearest.name } : null,
         },
       );
+      deps.events?.publish({
+        type: 'boarding.created',
+        tripId,
+        boarding: {
+          result,
+          passenger: passenger ? { id: passenger.id, fullName: passenger.fullName } : null,
+          stop: response.stop,
+          onboard: response.onboard,
+          overCapacity: response.overCapacity,
+        },
+      });
+      return response;
     },
 
     async reportIncident(
@@ -788,6 +804,7 @@ export function createDriverTripsService(deps: {
         gateVerified: trip.arrivedAt !== null,
       });
       await deps.liveStore?.removeTrip(session.tenantId, tripId);
+      deps.events?.publish({ type: 'trip.status_changed', tripId: trip.id });
       return state(tx, tripId);
     },
   };

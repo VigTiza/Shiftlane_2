@@ -226,6 +226,7 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 | GET | /trips/:id/positions?from=&to=&limit= | igual que el detalle del viaje | Recorrido GPS guardado |
 | GET | /trips/:id/live | `monitoring.view`, `schedule.read` o `plant.dashboard` | Última posición del viaje en curso con horas estimadas |
 | GET | /live/positions | `monitoring.view` o `dispatch.operate` | Posiciones en vivo de los viajes en curso de la empresa |
+| POST | /drivers/:id/messages | `dispatch.operate` | Mensaje al chofer (llega por tiempo real como `message.to_driver`) |
 | GET | /trips/:id | `schedule.read`, `monitoring.view`, `plant.evidence` o `plant.dashboard` | Detalle con evidencia: historial, checklist, abordajes, incidentes, fotos |
 | GET | /trips/:id/photos/:photoId | igual que el detalle | Foto del viaje |
 | POST | /trips/:id/checklist-exception | `dispatch.operate` | Autoriza salir con el checklist sin aprobar |
@@ -307,6 +308,28 @@ distancia directa × 1.3 a las paradas que faltan y a la planta (entrada) con la
 la ruta (distancia ÷ tiempo de la versión, o `ROUTING_AVERAGE_SPEED_KMH`) y 1 minuto por
 parada; `delayMinutes` compara contra la llegada programada. La posición en vivo está en
 Redis (`REDIS_URL`; sin él, memoria) y se borra al terminar el viaje.
+
+Tiempo real (Socket.IO, ruta `/realtime`): el cliente se conecta con
+`auth: { token: '<token de acceso>' }`; sin token válido o sin permiso la conexión se rechaza
+(«No autorizado.» o «Sin permiso para recibir eventos en tiempo real.»). Al conectar recibe
+`ready`; cuando vence el token recibe `session.expired` y se desconecta (reconectar con un
+token nuevo). Salas según quién se conecta: transportista con `monitoring.view`,
+`dispatch.operate`, `alerts.manage` o `schedule.read` → su empresa; planta con
+`plant.dashboard` o `plant.evidence` → sus plantas; pasajero → sus rutas; chofer → el suyo.
+
+| Evento | Lo reciben |
+|---|---|
+| `trip.status_changed`, `trip.position`, `trip.eta_updated` | Empresa, planta y pasajeros de la ruta |
+| `boarding.created` | Empresa y planta (no los pasajeros) |
+| `trip.cancelled` | Empresa, planta, pasajeros de la ruta y el chofer |
+| `route.changed` | Empresa, pasajeros de la ruta y choferes con viajes próximos |
+| `message.to_driver` | El chofer |
+| `alert.created`, `alert.updated` | Empresa; planta si la regla lo indica (F06) |
+| `device.health_changed` | Empresa (F06) |
+
+Los eventos salen solo después de guardar los cambios: lo publicado en una transacción que
+falla o en una petición que responde con error no se envía. Con `REDIS_URL`, varias copias
+de la API comparten las salas (adaptador de Redis).
 
 Credencial QR del pasajero: `SL1.<datos en base64url>.<firma Ed25519>`; los datos llevan
 credencial, pasajero, empresa y un valor aleatorio que cambia al reemitirla.

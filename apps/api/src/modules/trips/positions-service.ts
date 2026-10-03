@@ -3,6 +3,7 @@ import { delayMinutes, estimateArrivals, haversineMeters } from '@shiftlane/shar
 import { clockOffsetMs, correctedTime } from '../../lib/clock.ts';
 import type { Database, DbContext, DbTransaction } from '../../lib/db.ts';
 import { withDbContext } from '../../lib/db.ts';
+import type { DomainEvents } from '../../lib/domain-events.ts';
 import type { LivePosition, LiveStore } from '../../lib/live-store.ts';
 import { ensurePositionPartitions, utcDays } from '../../jobs/position-partitions.ts';
 import type { RoutesService } from '../routes/service.ts';
@@ -36,6 +37,7 @@ export function createPositionsService(deps: {
   routes: RoutesService;
   liveStore: LiveStore;
   averageSpeedKmh: number;
+  events?: DomainEvents;
 }) {
   async function insertPoints(
     tx: DbTransaction,
@@ -220,6 +222,14 @@ export function createPositionsService(deps: {
                   heading: latest.heading ?? null,
                   recordedAt: latest.recordedAt.toISOString(),
                   eta,
+                });
+                deps.events?.publish({
+                  type: 'trip.position',
+                  tripId: trip.id,
+                  autoArrivals: autoArrivals.map((a) => ({
+                    stopId: a.stopId,
+                    at: a.at.toISOString(),
+                  })),
                 });
               }
             }

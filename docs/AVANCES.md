@@ -1,9 +1,9 @@
 # AVANCES — Shiftlane
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
-- Fase actual: F05 — Operación de viajes y tiempo real
-- Último prompt completado: F05-P03 Ingesta GPS y posiciones
-- Siguiente prompt: F05-P04 Tiempo real con Socket.IO
+- Fase actual: F06 — Alertas y diagnóstico
+- Último prompt completado: F05-P04 Tiempo real con Socket.IO (fase F05 terminada)
+- Siguiente prompt: F06-P01 Motor de alertas
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -20,7 +20,9 @@
   - Tareas programadas: hoy corren dentro de la API (temporizador + candado de PostgreSQL).
     Pasarlas a BullMQ cuando Redis esté disponible (tras el reinicio y Docker).
   - Avisos de solicitudes de la planta (despachador y gerente) con el motor de
-    notificaciones (F14-P01).
+    notificaciones (F14-P01). Los mensajes al chofer hoy solo van por tiempo real (sin
+    guardar); si el chofer no está conectado no los recibe.
+  - Las salas se calculan al conectar: si cambian las rutas de un pasajero, debe reconectar.
   - Deuda técnica: varios servicios usan Promise.all dentro de transacciones (pg avisa que
     pg@9 lo prohibirá); volverlos secuenciales antes de actualizar pg.
   - La API de desarrollo se puede levantar con `node src/server.ts` en apps/api (puerto
@@ -139,7 +141,31 @@
   memoria) envuelta para que sus fallas nunca detengan la ingesta. Las tareas diarias pasan
   a un planificador genérico (src/jobs/scheduler.ts).
 
+- 2026-10-03 Eventos de dominio (src/lib/domain-events.ts) con cola «después del commit»
+  (AsyncLocalStorage): withDbContext entrega los de su transacción solo si se confirma y la
+  petición los envía solo si responde sin error. Socket.IO se suscribe al bus; F06 y las
+  notificaciones podrán hacerlo igual. Salas: tenant, planta, ruta y chofer.
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F05-P04 Tiempo real con Socket.IO
+- Hecho: servidor Socket.IO en /realtime autenticado con el token de acceso (se cierra al
+  vencer), salas por empresa, planta, ruta y chofer, adaptador Redis con REDIS_URL. Bus de
+  eventos de dominio y cola después del commit. Eventos: estado del viaje, posición, hora
+  estimada, abordajes, cancelaciones (manuales y automáticas, también de la tarea diaria),
+  cambios de ruta y mensajes al chofer (POST /drivers/:id/messages); alertas y salud del
+  celular listos para F06.
+- Archivos principales: apps/api/src/realtime/server.ts, src/lib/{after-commit,
+  domain-events}.ts, src/lib/db.ts, publicación en trips, schedule, routes, sync y jobs.
+- Pruebas agregadas / resultado: 7 de tiempo real con clientes Socket.IO reales (rechazo sin
+  token o sin permiso; viaje completo que llega a empresa, planta y pasajeros de la ruta y a
+  nadie más, ni a la rival que atiende la misma planta; abordajes sin pasajeros; mensajes;
+  cancelación; cambio de ruta; transacción y petición fallidas no avisan; token vencido) y 1
+  con dos copias de la API sobre Redis (en CI). 318 pruebas de la API en verde.
+- Problemas encontrados y cómo se resolvieron: io.close() cerraría el servidor HTTP de
+  Fastify; al cerrar solo se desconectan los sockets y el motor de Socket.IO.
+- Pendiente para después: guardar los mensajes al chofer (F07-P07 / F14); motor de alertas
+  que publique alert.* (F06-P01).
+
 ### 2026-10-03 — F05-P03 Ingesta GPS y posiciones
 - Hecho: migración telemetry (trip_positions particionada por día, RLS con evidencia para la
   planta, sin UPDATE/DELETE, función de particiones). POST /driver/positions con corrección

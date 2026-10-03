@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { FastifyPluginCallbackZod } from 'fastify-type-provider-zod';
 
 import { withDbContext } from '../../lib/db.ts';
@@ -7,6 +9,7 @@ import {
   parseSpreadsheet,
   XLSX_CONTENT_TYPE,
 } from '../../lib/excel.ts';
+import { NotFoundError } from '../../lib/errors.ts';
 import { sendFile } from '../../lib/files.ts';
 import {
   auditEntrySchema,
@@ -378,6 +381,41 @@ export const driverRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
         driverAuth.resetPin(tx, request.params.id),
       );
       return { message: 'El PIN se restableció. El chofer creará uno nuevo al entrar.' };
+    },
+  );
+
+  app.post(
+    '/drivers/:id/messages',
+    {
+      onRequest: requirePermission(app, 'dispatch.operate'),
+      schema: {
+        tags: TAGS,
+        summary: 'Envía un mensaje al chofer (aparece en su pantalla con sonido)',
+        params: idParams,
+        body: z.object({
+          text: z.string().trim().min(1, 'Escribe el mensaje.').max(500),
+        }),
+        response: { 202: z.object({ id: z.uuid(), sentAt: z.string() }) },
+      },
+    },
+    async (request, reply) => {
+      const driver = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
+        tx.driver.findFirst({ where: { id: request.params.id, deletedAt: null } }),
+      );
+      if (!driver) throw new NotFoundError('No se encontró el chofer.');
+      const message = {
+        id: randomUUID(),
+        text: request.body.text,
+        sentAt: new Date().toISOString(),
+        fromUserId: authOf(request, 'user').sub,
+      };
+      app.events.publish({
+        type: 'message.to_driver',
+        tenantId: driver.tenantId,
+        driverId: driver.id,
+        message,
+      });
+      return reply.status(202).send({ id: message.id, sentAt: message.sentAt });
     },
   );
 

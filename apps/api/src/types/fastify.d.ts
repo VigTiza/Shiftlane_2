@@ -2,7 +2,9 @@ import type { Env } from '../config/env.ts';
 import type { CredentialSigner } from '../lib/credential-signer.ts';
 import type { Cipher } from '../lib/crypto.ts';
 import type { Database } from '../lib/db.ts';
+import type { DomainEvents } from '../lib/domain-events.ts';
 import type { LiveStore } from '../lib/live-store.ts';
+import type { Realtime } from '../realtime/server.ts';
 import type { Mailer } from '../lib/mailer.ts';
 import type { RoutingProvider } from '../lib/routing.ts';
 import type { ObjectStorage } from '../lib/storage.ts';
@@ -13,6 +15,11 @@ import type { TokenService } from '../modules/auth/tokens.ts';
 import type { ScheduleService } from '../modules/schedule/service.ts';
 
 declare module 'fastify' {
+  interface FastifyRequest {
+    /** Acciones que se ejecutan al responder sin error (después de guardar los cambios). */
+    afterCommit: (() => void)[];
+  }
+
   interface FastifyInstance {
     config: Env;
     db: Database;
@@ -24,6 +31,8 @@ declare module 'fastify' {
     routingProvider: RoutingProvider;
     schedule: ScheduleService;
     liveStore: LiveStore;
+    events: DomainEvents;
+    realtime: Realtime;
     authServices: {
       auth: AuthService;
       drivers: DriverAuthService;

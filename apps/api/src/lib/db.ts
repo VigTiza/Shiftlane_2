@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
 
 import { PrismaClient } from '../generated/prisma/client.ts';
+import { withAfterCommit } from './after-commit.ts';
 import type { Prisma } from '../generated/prisma/client.ts';
 
 /** Rol de PostgreSQL con el que corre la API; está sujeto a la seguridad por filas. */
@@ -64,7 +65,8 @@ export function createDatabase(connectionString: string): Database {
 
 /**
  * Ejecuta `fn` en una transacción con el contexto fijado con set_config(..., true), que
- * equivale a SET LOCAL: al terminar la transacción la conexión vuelve a no ver nada.
+ * equivale a SET LOCAL: al terminar la transacción la conexión vuelve a no ver nada. Los
+ * eventos publicados dentro solo se entregan si la transacción se confirma.
  */
 export async function withDbContext<T>(
   db: DbClient,
@@ -72,9 +74,10 @@ export async function withDbContext<T>(
   fn: (tx: DbTransaction) => Promise<T>,
   options?: { timeout?: number },
 ): Promise<T> {
-  return db.$transaction(
-    async (tx) => {
-      await tx.$executeRaw`
+  return withAfterCommit(() =>
+    db.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`
         SELECT set_config('app.tenant_id', ${context.tenantId ?? ''}, true),
                set_config('app.client_org_id', ${context.clientOrgId ?? ''}, true),
                set_config('app.user_id', ${context.userId ?? ''}, true),
@@ -82,9 +85,10 @@ export async function withDbContext<T>(
                set_config('app.actor_id', ${context.actorId ?? context.userId ?? ''}, true),
                set_config('app.request_id', ${context.requestId ?? ''}, true),
                set_config('app.ip', ${context.ip ?? ''}, true)`;
-      return fn(tx);
-    },
-    { timeout: options?.timeout ?? 10_000 },
+        return fn(tx);
+      },
+      { timeout: options?.timeout ?? 10_000 },
+    ),
   );
 }
 
