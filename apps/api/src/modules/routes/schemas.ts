@@ -19,11 +19,20 @@ export const directionSchema = z.enum(['inbound', 'outbound']);
 
 export const listShiftsQuery = z.object({ plantId: z.uuid().optional() });
 
+/** Días de la semana (0 = domingo); se guardan sin repetir y en orden. */
+export const weekdaysSchema = z
+  .array(z.number().int().min(0).max(6))
+  .min(1, 'Elige al menos un día.')
+  .max(7)
+  .transform((days) => [...new Set(days)].sort((a, b) => a - b));
+
 export const createShiftBody = z.object({
   plantId: z.uuid(),
   name: z.string().trim().min(2, 'Escribe el nombre del turno.').max(60),
   startsAt: time,
   endsAt: time,
+  /** Por omisión, de lunes a viernes. */
+  weekdays: weekdaysSchema.optional(),
 });
 
 export const updateShiftBody = z
@@ -31,6 +40,7 @@ export const updateShiftBody = z
     name: z.string().trim().min(2).max(60).optional(),
     startsAt: time.optional(),
     endsAt: time.optional(),
+    weekdays: weekdaysSchema.optional(),
     active: z.boolean().optional(),
   })
   .refine((body) => Object.keys(body).length > 0, { message: 'No hay cambios que guardar.' });
@@ -41,6 +51,7 @@ export const shiftSummary = z.object({
   name: z.string(),
   startsAt: z.string(),
   endsAt: z.string(),
+  weekdays: z.array(z.number().int()),
   active: z.boolean(),
 });
 

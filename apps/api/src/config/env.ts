@@ -70,6 +70,12 @@ const envSchema = z
     OFF_ROUTE_THRESHOLD_METERS: z.coerce.number().int().positive().default(150),
     /** Zona horaria por omisión para fechas de negocio (vencimientos, días de servicio). */
     DEFAULT_TIME_ZONE: z.string().default('America/Ciudad_Juarez'),
+    /** Tareas programadas dentro de la API (por omisión, activas salvo en pruebas). */
+    SCHEDULER_ENABLED: booleanFromEnv.optional(),
+    /** Hora local (DEFAULT_TIME_ZONE) a la que corren las tareas diarias. */
+    DAILY_JOBS_HOUR: z.coerce.number().int().min(0).max(23).default(2),
+    /** Días de viajes que se mantienen generados por adelantado. */
+    TRIP_HORIZON_DAYS: z.coerce.number().int().min(1).max(62).default(14),
   })
   .superRefine((env, ctx) => {
     if (env.ROUTING_PROVIDER === 'osrm' && !env.ROUTING_URL) {

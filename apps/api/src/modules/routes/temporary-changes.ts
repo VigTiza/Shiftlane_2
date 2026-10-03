@@ -167,15 +167,33 @@ export function createTemporaryChangesService(deps: {
       }))
       .sort((a, b) => a.fullName.localeCompare(b.fullName));
 
+    const period = await serviceDays(tx, routeId, proposal);
+    const trips = await tx.trip.findMany({
+      where: {
+        routeId,
+        status: 'scheduled',
+        serviceDate: {
+          gte: toDbDate(period.from),
+          ...(period.to ? { lte: toDbDate(period.to) } : {}),
+        },
+      },
+      orderBy: { serviceDate: 'asc' },
+      select: { id: true, serviceDate: true },
+    });
+
     return {
-      period: await serviceDays(tx, routeId, proposal),
+      period,
       suspended,
       stops,
       distanceKm: { from: baseline.distanceKm, to: metrics.distanceKm },
       durationMinutes: { from: baseline.durationMinutes, to: metrics.durationMinutes },
       passengers,
-      // Los viajes y choferes afectados se agregan cuando existen viajes programados (F04).
-      trips: [] as { id: string; date: string; driverName: string | null }[],
+      // Viajes ya programados en el periodo; el chofer se llena con la asignación (F04-P02).
+      trips: trips.map((trip) => ({
+        id: trip.id,
+        date: fromDbDate(trip.serviceDate)!,
+        driverName: null as string | null,
+      })),
       drivers: [] as { id: string; fullName: string }[],
     };
   }
@@ -273,6 +291,7 @@ export function createTemporaryChangesService(deps: {
         where: { id: changeId },
         data: { cancelledAt: new Date() },
       });
+      return { routeId: change.routeId };
     },
   };
 }

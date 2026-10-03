@@ -9,6 +9,7 @@ import type { DriverAuthService } from '../modules/auth/driver-service.ts';
 import type { createPassengerAuthService } from '../modules/auth/passenger-service.ts';
 import type { AuthService } from '../modules/auth/service.ts';
 import type { TokenService } from '../modules/auth/tokens.ts';
+import type { ScheduleService } from '../modules/schedule/service.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -20,6 +21,7 @@ declare module 'fastify' {
     mailer: Mailer;
     storage: ObjectStorage;
     routingProvider: RoutingProvider;
+    schedule: ScheduleService;
     authServices: {
       auth: AuthService;
       drivers: DriverAuthService;

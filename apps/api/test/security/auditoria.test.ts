@@ -11,6 +11,7 @@ const PASSWORD = 'Transporte2026';
 const AUDIT_EXEMPT = [
   'route_stop_times',
   'stops',
+  'trips',
 
   'audit_log',
   'passenger_imports',

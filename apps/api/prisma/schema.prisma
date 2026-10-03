@@ -63,6 +63,8 @@ model Tenant {
   routeStopTimes      RouteStopTime[]
   temporaryChanges    TemporaryChange[]
   routePassengers     RoutePassenger[]
+  holidays            Holiday[]
+  trips               Trip[]
 
   @@map("tenants")
 }
@@ -328,6 +330,8 @@ model Plant {
   passengerImports  PassengerImport[]
   shifts            Shift[]
   routes            Route[]
+  holidays          Holiday[]
+  trips             Trip[]
 
   @@unique([id, clientOrgId])
   @@index([clientOrgId])
@@ -969,6 +973,8 @@ model Shift {
   startsAt  String    @map("starts_at")
   /// Hora de salida de planta HH:MM.
   endsAt    String    @map("ends_at")
+  /// Días en que hay turno (0 = domingo). Por omisión de lunes a viernes.
+  weekdays  Int[]     @default([1, 2, 3, 4, 5])
   active    Boolean   @default(true)
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -977,6 +983,7 @@ model Shift {
   tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   plant  Plant   @relation(fields: [plantId], references: [id], onDelete: Restrict)
   routes Route[]
+  trips  Trip[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, plantId, name])
@@ -1011,6 +1018,7 @@ model Route {
   temporaryChanges TemporaryChange[]
   rates            Rate[]
   passengers       RoutePassenger[]
+  trips            Trip[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -1048,6 +1056,7 @@ model RouteVersion {
   route            Route             @relation(fields: [routeId, tenantId], references: [id, tenantId], onDelete: Cascade)
   stops            Stop[]
   temporaryChanges TemporaryChange[]
+  trips            Trip[]
 
   @@unique([id, tenantId])
   @@unique([routeId, number])
@@ -1147,4 +1156,77 @@ model RoutePassenger {
   @@unique([routeId, passengerId])
   @@index([passengerId])
   @@map("route_passengers")
+}
+
+// ---------------------------------------------------------------------------
+// Programación: días festivos y viajes
+// ---------------------------------------------------------------------------
+
+/// Día festivo de la transportista (o de una planta). Si serviceRuns es falso, ese día no se
+/// programan viajes; si es verdadero, se programan y se marcan como festivos (tarifa especial).
+model Holiday {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  /// Nulo: aplica a todas las plantas que atiende la transportista.
+  plantId     String?  @map("plant_id") @db.Uuid
+  date        DateTime @db.Date
+  name        String
+  serviceRuns Boolean  @default(true) @map("service_runs")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  plant  Plant? @relation(fields: [plantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, plantId, date])
+  @@index([tenantId, date])
+  @@map("holidays")
+}
+
+enum TripStatus {
+  scheduled
+  in_progress
+  completed
+  cancelled
+}
+
+enum TripKind {
+  regular
+  extra
+}
+
+/// Viaje programado. Los regulares los genera el sistema (generation_key = ruta + día).
+model Trip {
+  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String         @map("tenant_id") @db.Uuid
+  plantId           String         @map("plant_id") @db.Uuid
+  routeId           String?        @map("route_id") @db.Uuid
+  routeVersionId    String?        @map("route_version_id") @db.Uuid
+  shiftId           String?        @map("shift_id") @db.Uuid
+  temporaryChangeId String?        @map("temporary_change_id") @db.Uuid
+  kind              TripKind       @default(regular)
+  status            TripStatus     @default(scheduled)
+  direction         RouteDirection
+  serviceDate       DateTime       @map("service_date") @db.Date
+  scheduledStartAt  DateTime       @map("scheduled_start_at") @db.Timestamptz(3)
+  scheduledEndAt    DateTime       @map("scheduled_end_at") @db.Timestamptz(3)
+  isHoliday         Boolean        @default(false) @map("is_holiday")
+  /// Llave de idempotencia de los viajes regulares: "<ruta>:<AAAA-MM-DD>".
+  generationKey     String?        @unique @map("generation_key")
+  cancelReason      String?        @map("cancel_reason")
+  notes             String?
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  plant        Plant         @relation(fields: [plantId], references: [id], onDelete: Restrict)
+  route        Route?        @relation(fields: [routeId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  routeVersion RouteVersion? @relation(fields: [routeVersionId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  shift        Shift?        @relation(fields: [shiftId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@index([tenantId, serviceDate])
+  @@index([routeId, serviceDate])
+  @@index([plantId, serviceDate])
+  @@map("trips")
 }

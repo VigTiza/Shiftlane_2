@@ -42,6 +42,7 @@ function mapShift(shift: Shift) {
     name: shift.name,
     startsAt: shift.startsAt,
     endsAt: shift.endsAt,
+    weekdays: shift.weekdays,
     active: shift.active,
   };
 }
@@ -412,11 +413,20 @@ export function createRoutesService(deps: { routing: RoutingProvider; averageSpe
     async createShift(
       tx: DbTransaction,
       tenantId: string,
-      input: { plantId: string; name: string; startsAt: string; endsAt: string },
+      input: {
+        plantId: string;
+        name: string;
+        startsAt: string;
+        endsAt: string;
+        weekdays?: number[] | undefined;
+      },
     ) {
       await assertServedPlant(tx, tenantId, input.plantId);
       try {
-        return mapShift(await tx.shift.create({ data: { ...input, tenantId } }));
+        const { weekdays, ...data } = input;
+        return mapShift(
+          await tx.shift.create({ data: { ...data, ...(weekdays ? { weekdays } : {}), tenantId } }),
+        );
       } catch (error) {
         if (isUniqueViolation(error))
           throw new ConflictError('Ya existe un turno con ese nombre en la planta.');
@@ -431,6 +441,7 @@ export function createRoutesService(deps: { routing: RoutingProvider; averageSpe
         name?: string | undefined;
         startsAt?: string | undefined;
         endsAt?: string | undefined;
+        weekdays?: number[] | undefined;
         active?: boolean | undefined;
       },
     ) {

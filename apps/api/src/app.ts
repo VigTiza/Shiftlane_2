@@ -19,6 +19,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { Env } from './config/env.ts';
 import { createCredentialSigner } from './lib/credential-signer.ts';
 import { createCipher } from './lib/crypto.ts';
+import { createTripHorizonJob } from './jobs/trip-horizon.ts';
 import { createDatabase } from './lib/db.ts';
 import type { Database } from './lib/db.ts';
 import { AppError } from './lib/errors.ts';
@@ -49,6 +50,8 @@ import { invitationRoutes } from './modules/invitations/routes.ts';
 import { leadRoutes } from './modules/leads/routes.ts';
 import { passengerRoutes } from './modules/passengers/routes.ts';
 import { routeRoutes } from './modules/routes/routes.ts';
+import { scheduleRoutes } from './modules/schedule/routes.ts';
+import { createScheduleService } from './modules/schedule/service.ts';
 import { userRoutes } from './modules/users/routes.ts';
 import { vehicleRoutes } from './modules/vehicles/routes.ts';
 import { authPlugin } from './plugins/auth.ts';
@@ -143,6 +146,24 @@ export async function buildApp({ env, db, mailer, storage, routing }: BuildAppOp
         app.log.warn({ err: error }, 'Servicio de rutas no disponible; se usa línea recta'),
     }),
   );
+  app.decorate(
+    'schedule',
+    createScheduleService({ horizonDays: env.TRIP_HORIZON_DAYS, timeZone: env.DEFAULT_TIME_ZONE }),
+  );
+  if (env.SCHEDULER_ENABLED ?? env.NODE_ENV !== 'test') {
+    const tripHorizon = createTripHorizonJob({
+      db: database.system,
+      log: app.log,
+      horizonDays: env.TRIP_HORIZON_DAYS,
+      timeZone: env.DEFAULT_TIME_ZONE,
+      hour: env.DAILY_JOBS_HOUR,
+    });
+    app.addHook('onReady', (done) => {
+      tripHorizon.start();
+      done();
+    });
+    app.addHook('onClose', async () => tripHorizon.stop());
+  }
   app.decorate('authServices', {
     auth: createAuthService({ ...authDeps, cipher, mailer: mail, appUrl: env.APP_URL }),
     drivers: createDriverAuthService(authDeps),
@@ -206,6 +227,7 @@ export async function buildApp({ env, db, mailer, storage, routing }: BuildAppOp
   await app.register(invitationRoutes);
   await app.register(passengerRoutes);
   await app.register(routeRoutes);
+  await app.register(scheduleRoutes);
 
   return app;
 }

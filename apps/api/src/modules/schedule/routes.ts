@@ -1,0 +1,158 @@
+import type { FastifyPluginCallbackZod } from 'fastify-type-provider-zod';
+
+import { withDbContext } from '../../lib/db.ts';
+import { idParams } from '../../lib/http-schemas.ts';
+import { z } from '../../lib/zod.ts';
+import { dbContextOf, requirePermission, tenantIdOf } from '../../plugins/auth.ts';
+import {
+  createHolidayBody,
+  generateBody,
+  generationResult,
+  holidaySummary,
+  importOfficialBody,
+  importOfficialResult,
+  listHolidaysQuery,
+  listTripsQuery,
+  tripPage,
+  updateHolidayBody,
+} from './schemas.ts';
+
+const TAGS = ['Programación'];
+
+export const scheduleRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
+  const service = app.schedule;
+  const canWrite = requirePermission(app, 'schedule.write');
+  // La planta ve los viajes de sus transportistas (la seguridad por filas filtra cuáles).
+  const canReadTrips = requirePermission(app, 'schedule.read', 'plant.dashboard');
+  const canReadHolidays = requirePermission(app, 'schedule.read', 'settings.manage');
+  const canWriteHolidays = requirePermission(app, 'schedule.write', 'settings.manage');
+
+  app.post(
+    '/schedule/generate',
+    {
+      onRequest: canWrite,
+      schema: {
+        tags: TAGS,
+        summary: 'Genera los viajes regulares de un rango de fechas (idempotente)',
+        description:
+          'Crea los viajes que faltan, actualiza los programados que cambiaron y cancela los que ya no aplican. No toca viajes iniciados ni fechas pasadas. Máximo 62 días.',
+        body: generateBody,
+        response: { 200: generationResult },
+      },
+    },
+    (request) =>
+      withDbContext(
+        app.db.app,
+        dbContextOf(request),
+        (tx) => service.generate(tx, tenantIdOf(request), request.body.from, request.body.to),
+        { timeout: 60_000 },
+      ),
+  );
+
+  app.get(
+    '/trips',
+    {
+      onRequest: canReadTrips,
+      schema: {
+        tags: TAGS,
+        summary: 'Viajes programados de un rango de fechas (por omisión, esta semana)',
+        querystring: listTripsQuery,
+        response: { 200: tripPage },
+      },
+    },
+    (request) =>
+      withDbContext(app.db.app, dbContextOf(request), (tx) => service.listTrips(tx, request.query)),
+  );
+
+  app.get(
+    '/holidays',
+    {
+      onRequest: canReadHolidays,
+      schema: {
+        tags: TAGS,
+        summary: 'Días festivos del año (generales y por planta)',
+        querystring: listHolidaysQuery,
+        response: { 200: z.array(holidaySummary) },
+      },
+    },
+    (request) =>
+      withDbContext(app.db.app, dbContextOf(request), (tx) =>
+        service.listHolidays(tx, request.query),
+      ),
+  );
+
+  app.post(
+    '/holidays',
+    {
+      onRequest: canWriteHolidays,
+      schema: {
+        tags: TAGS,
+        summary: 'Registra un día festivo y ajusta los viajes ya programados',
+        body: createHolidayBody,
+        response: { 201: holidaySummary },
+      },
+    },
+    async (request, reply) => {
+      const holiday = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
+        service.createHoliday(tx, tenantIdOf(request), request.body),
+      );
+      return reply.status(201).send(holiday);
+    },
+  );
+
+  app.post(
+    '/holidays/official',
+    {
+      onRequest: canWriteHolidays,
+      schema: {
+        tags: TAGS,
+        summary: 'Agrega los días de descanso obligatorio de la Ley Federal del Trabajo',
+        body: importOfficialBody,
+        response: { 200: importOfficialResult },
+      },
+    },
+    (request) =>
+      withDbContext(app.db.app, dbContextOf(request), (tx) =>
+        service.importOfficial(tx, tenantIdOf(request), request.body),
+      ),
+  );
+
+  app.patch(
+    '/holidays/:id',
+    {
+      onRequest: canWriteHolidays,
+      schema: {
+        tags: TAGS,
+        summary: 'Cambia el nombre o si hay servicio ese día',
+        params: idParams,
+        body: updateHolidayBody,
+        response: { 200: holidaySummary },
+      },
+    },
+    (request) =>
+      withDbContext(app.db.app, dbContextOf(request), (tx) =>
+        service.updateHoliday(tx, tenantIdOf(request), request.params.id, request.body),
+      ),
+  );
+
+  app.delete(
+    '/holidays/:id',
+    {
+      onRequest: canWriteHolidays,
+      schema: {
+        tags: TAGS,
+        summary: 'Elimina un día festivo y ajusta los viajes ya programados',
+        params: idParams,
+        response: { 204: z.null() },
+      },
+    },
+    async (request, reply) => {
+      await withDbContext(app.db.app, dbContextOf(request), (tx) =>
+        service.removeHoliday(tx, tenantIdOf(request), request.params.id),
+      );
+      return reply.status(204).send(null);
+    },
+  );
+
+  done();
+};

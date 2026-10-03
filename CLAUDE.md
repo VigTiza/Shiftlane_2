@@ -95,6 +95,11 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
   versiona). `app.db.app` respeta RLS y siempre se usa dentro de
   `withDbContext(db.app, { tenantId, clientOrgId, userId }, (tx) => ...)`. `app.db.system`
   se salta RLS: solo autenticación, tareas programadas y consola de plataforma.
+- Tareas programadas en src/jobs: idempotentes, una transacción por transportista con
+  `pg_try_advisory_xact_lock` (varias copias de la API no se pisan). Se activan con
+  SCHEDULER_ENABLED (apagadas con NODE_ENV=test; en pruebas se llaman directo).
+- Viajes regulares: cualquier cambio que afecte la programación (rutas, versiones, turnos,
+  festivos, cambios temporales) llama a `app.schedule.refresh*` en la misma transacción.
 - Autorización por acción (docs/api.md): rutas de usuarios web con
   `onRequest: requirePermission(app, 'drivers.enroll')`; choferes/pasajeros con
   `requireAuth(app, { kinds: [...] })`. Permisos nuevos se agregan en

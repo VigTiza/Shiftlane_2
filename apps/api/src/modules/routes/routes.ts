@@ -1,6 +1,8 @@
+import type { FastifyRequest } from 'fastify';
 import type { FastifyPluginCallbackZod } from 'fastify-type-provider-zod';
 
 import { withDbContext } from '../../lib/db.ts';
+import type { DbTransaction } from '../../lib/db.ts';
 import { idParams } from '../../lib/http-schemas.ts';
 import { z } from '../../lib/zod.ts';
 import { authOf, dbContextOf, requirePermission, tenantIdOf } from '../../plugins/auth.ts';
@@ -49,6 +51,11 @@ export const routeRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
     routing: app.routingProvider,
   });
   const routePassengers = createRoutePassengersService({ routes: service });
+
+  /** Después de cada cambio, ajusta los viajes ya generados en la misma transacción. */
+  async function refreshTrips(tx: DbTransaction, request: FastifyRequest, routeId: string) {
+    await app.schedule.refreshRoutes(tx, tenantIdOf(request), [routeId]);
+  }
   const canRead = requirePermission(app, 'routes.read');
   const canWrite = requirePermission(app, 'routes.write');
   const canReadShifts = requirePermission(app, 'routes.read', 'schedule.read', 'settings.manage');
@@ -103,9 +110,11 @@ export const routeRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
       },
     },
     (request) =>
-      withDbContext(app.db.app, dbContextOf(request), (tx) =>
-        service.updateShift(tx, request.params.id, request.body),
-      ),
+      withDbContext(app.db.app, dbContextOf(request), async (tx) => {
+        const shift = await service.updateShift(tx, request.params.id, request.body);
+        await app.schedule.refreshShift(tx, tenantIdOf(request), shift.id);
+        return shift;
+      }),
   );
 
   app.get(
@@ -135,9 +144,16 @@ export const routeRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
       },
     },
     async (request, reply) => {
-      const route = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
-        service.create(tx, tenantIdOf(request), authOf(request, 'user').sub, request.body),
-      );
+      const route = await withDbContext(app.db.app, dbContextOf(request), async (tx) => {
+        const created = await service.create(
+          tx,
+          tenantIdOf(request),
+          authOf(request, 'user').sub,
+          request.body,
+        );
+        await refreshTrips(tx, request, created.id);
+        return created;
+      });
       return reply.status(201).send(route);
     },
   );
@@ -170,9 +186,11 @@ export const routeRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
       },
     },
     (request) =>
-      withDbContext(app.db.app, dbContextOf(request), (tx) =>
-        service.update(tx, request.params.id, request.body),
-      ),
+      withDbContext(app.db.app, dbContextOf(request), async (tx) => {
+        const route = await service.update(tx, request.params.id, request.body);
+        await refreshTrips(tx, request, route.id);
+        return route;
+      }),
   );
 
   app.delete(
@@ -187,9 +205,10 @@ export const routeRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
       },
     },
     async (request, reply) => {
-      await withDbContext(app.db.app, dbContextOf(request), (tx) =>
-        service.remove(tx, request.params.id),
-      );
+      await withDbContext(app.db.app, dbContextOf(request), async (tx) => {
+        await service.remove(tx, request.params.id);
+        await refreshTrips(tx, request, request.params.id);
+      });
       return reply.status(204).send(null);
     },
   );
@@ -225,9 +244,16 @@ export const routeRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
       },
     },
     async (request, reply) => {
-      const version = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
-        service.createVersion(tx, request.params.id, authOf(request, 'user').sub, request.body),
-      );
+      const version = await withDbContext(app.db.app, dbContextOf(request), async (tx) => {
+        const created = await service.createVersion(
+          tx,
+          request.params.id,
+          authOf(request, 'user').sub,
+          request.body,
+        );
+        await refreshTrips(tx, request, request.params.id);
+        return created;
+      });
       return reply.status(201).send(version);
     },
   );
@@ -262,15 +288,17 @@ export const routeRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
       },
     },
     async (request, reply) => {
-      const version = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
-        service.restoreVersion(
+      const version = await withDbContext(app.db.app, dbContextOf(request), async (tx) => {
+        const restored = await service.restoreVersion(
           tx,
           request.params.id,
           request.params.versionId,
           authOf(request, 'user').sub,
           request.body.validFrom,
-        ),
-      );
+        );
+        await refreshTrips(tx, request, request.params.id);
+        return restored;
+      });
       return reply.status(201).send(version);
     },
   );
@@ -287,9 +315,10 @@ export const routeRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
       },
     },
     async (request, reply) => {
-      await withDbContext(app.db.app, dbContextOf(request), (tx) =>
-        service.deleteVersion(tx, request.params.id, request.params.versionId),
-      );
+      await withDbContext(app.db.app, dbContextOf(request), async (tx) => {
+        await service.deleteVersion(tx, request.params.id, request.params.versionId);
+        await refreshTrips(tx, request, request.params.id);
+      });
       return reply.status(204).send(null);
     },
   );
@@ -308,9 +337,16 @@ export const routeRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
       },
     },
     async (request, reply) => {
-      const change = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
-        temporaryChanges.create(tx, request.params.id, authOf(request, 'user').sub, request.body),
-      );
+      const change = await withDbContext(app.db.app, dbContextOf(request), async (tx) => {
+        const created = await temporaryChanges.create(
+          tx,
+          request.params.id,
+          authOf(request, 'user').sub,
+          request.body,
+        );
+        await refreshTrips(tx, request, request.params.id);
+        return created;
+      });
       return reply.status(201).send(change);
     },
   );
@@ -327,9 +363,10 @@ export const routeRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
       },
     },
     async (request, reply) => {
-      await withDbContext(app.db.app, dbContextOf(request), (tx) =>
-        temporaryChanges.cancel(tx, request.params.id),
-      );
+      await withDbContext(app.db.app, dbContextOf(request), async (tx) => {
+        const { routeId } = await temporaryChanges.cancel(tx, request.params.id);
+        await refreshTrips(tx, request, routeId);
+      });
       return reply.status(204).send(null);
     },
   );

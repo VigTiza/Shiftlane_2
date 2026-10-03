@@ -2,8 +2,8 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F04 — Programación de servicios
-- Último prompt completado: F03-P03 (fase F03 terminada)
-- Siguiente prompt: F04-P01 Generador de viajes
+- Último prompt completado: F04-P01 Generador de viajes
+- Siguiente prompt: F04-P02 Asignación y conflictos
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -16,8 +16,11 @@
   - GitHub: origin = https://github.com/VigTiza/Shiftlane_2 (público), con acceso por el
     administrador de credenciales de Git. El CI pasó completo (incluye Testcontainers y
     Flutter en GitHub). Revisar el resultado tras cada push.
-  - F04: la simulación de cambios de ruta debe agregar viajes y choferes afectados cuando
-    existan los viajes programados (hoy devuelve listas vacías).
+  - F04-P02: llenar chofer en los viajes de la simulación y la lista de choferes afectados.
+  - Tareas programadas: hoy corren dentro de la API (temporizador + candado de PostgreSQL).
+    Pasarlas a BullMQ cuando Redis esté disponible (tras el reinicio y Docker).
+  - Deuda técnica: varios servicios usan Promise.all dentro de transacciones (pg avisa que
+    pg@9 lo prohibirá); volverlos secuenciales antes de actualizar pg.
   - La API de desarrollo se puede levantar con `node src/server.ts` en apps/api (puerto
     3000, documentación en http://localhost:3000/docs).
 
@@ -93,7 +96,42 @@
   suspensión del servicio; solo aplican si la ruta ya existía. Pasajeros asignados a paradas
   por stop_key (route_passengers). La simulación no guarda nada.
 
+- 2026-10-03 Viajes regulares idempotentes con generation_key «ruta:fecha». Regenerar
+  cancela con motivo «[Automático] …» y solo reactiva esas cancelaciones; no toca viajes
+  iniciados, terminados o cancelados a mano, ni fechas pasadas. Los cambios de ruta, turno,
+  festivo y cambio temporal ajustan los viajes en la misma transacción. Las transportistas
+  suspendidas siguen generando viajes (la operación no se detiene por cobro).
+- 2026-10-03 La tarea diaria (14 días por adelantado) corre dentro de la API con un candado
+  de PostgreSQL por transportista (pg_try_advisory_xact_lock); BullMQ queda para cuando haya
+  Redis. Se desactiva en pruebas (SCHEDULER_ENABLED).
+- 2026-10-03 Festivos por transportista, generales o por planta, con «hay servicio» (se marca
+  is_holiday para tarifa especial) o «sin servicio». Se importan los de la LFT art. 74.
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F04-P01 Generador de viajes
+- Hecho: packages/shared/src/calendar.ts (festivos LFT art. 74 con lunes móviles y
+  transmisión del Ejecutivo; hora local a UTC con horario de verano). Migración trips:
+  shifts.weekdays, holidays (único general por día con NULLS NOT DISTINCT), trips (estado,
+  tipo, sentido, fecha de servicio, horarios, festivo, generation_key). RLS: festivos de la
+  transportista; viajes de la transportista y visibles para la planta con acuerdo; sin DELETE.
+  Generador idempotente (src/modules/schedule/generator.ts) con turnos, días de la semana,
+  festivos, cambios temporales, versiones, acuerdo vigente y turnos que cruzan la medianoche.
+  Endpoints /schedule/generate, /trips, /holidays (+ /holidays/official). Tarea diaria
+  src/jobs/trip-horizon.ts. Ajuste automático tras cambios de rutas, versiones, turnos,
+  festivos y cambios temporales. La simulación lista los viajes programados afectados.
+- Archivos principales: apps/api/src/modules/schedule/*, apps/api/src/jobs/trip-horizon.ts,
+  prisma/migrations/*_trips, packages/shared/src/calendar.ts.
+- Pruebas agregadas / resultado: 5 de calendario en shared y 14 de integración (horizonte al
+  crear la ruta, idempotencia, validaciones y permisos, días del turno, salida y medianoche,
+  horario de verano, festivo por planta sin/con servicio, festivos LFT sin repetir,
+  suspensión y su cancelación, cambio de horario y versión nueva, viajes iniciados y
+  cancelaciones manuales intactos, simulación, tarea diaria, visibilidad planta/rival). 236
+  pruebas de la API y 42 de shared en verde.
+- Problemas encontrados y cómo se resolvieron: `dart` no estaba en el PATH de la terminal
+  (se usa C:\src\flutter\bin). El aviso de pg por consultas en paralelo dentro de
+  transacciones queda como deuda técnica.
+- Pendiente para después: choferes en la simulación (F04-P02); BullMQ con Redis.
+
 ### 2026-10-03 — F03-P03 Cambios temporales y simulación
 - Hecho: vigencia con suspensión (versionId nulo); cambios temporales con versión alterna o
   servicio suspendido, validación de fechas, traslapes y duración, cancelación; asignación de

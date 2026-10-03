@@ -183,8 +183,8 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 | GET | /provisional-badges | `plant.employees` o `passengers.read` | Gafetes provisionales |
 | POST | /provisional-badges/:id/resolve, /dismiss | `plant.employees` | Asignar a un empleado o descartar |
 
-| GET/POST | /shifts | `routes.read` / `routes.write` o `settings.manage` | Turnos de las plantas atendidas |
-| PATCH | /shifts/:id | `routes.write` o `settings.manage` | Editar o desactivar turno |
+| GET/POST | /shifts | `routes.read` / `routes.write` o `settings.manage` | Turnos de las plantas atendidas (con días de la semana; por omisión, lunes a viernes) |
+| PATCH | /shifts/:id | `routes.write` o `settings.manage` | Editar o desactivar turno (ajusta los viajes ya generados) |
 | GET/POST | /routes | `routes.read` / `routes.write` | Rutas con su versión vigente; alta con primera versión |
 | GET/PATCH/DELETE | /routes/:id | `routes.read` / `routes.write` | Historial de versiones y cambios temporales; datos generales |
 | GET | /routes/:id/effective?date= | `routes.read` | Versión que aplica en una fecha (incluye cambios temporales) |
@@ -200,6 +200,12 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 | GET | /route-versions/:id/nearest-stop?lat=&lng=&maxMeters= | `routes.read` | Parada más cercana dentro del radio |
 | GET | /route-versions/:id/distance-to-path?lat=&lng=&thresholdMeters= | `routes.read` | Distancia al trazado y si es desvío |
 
+| POST | /schedule/generate | `schedule.write` | Genera los viajes regulares de un rango (máx. 62 días); idempotente |
+| GET | /trips?from=&to=&plantId=&routeId=&status=&kind= | `schedule.read` o `plant.dashboard` | Viajes de un rango (por omisión, esta semana); la planta ve los de sus transportistas |
+| GET/POST | /holidays | `schedule.read` / `schedule.write` o `settings.manage` | Días festivos del año, generales o por planta |
+| PATCH/DELETE | /holidays/:id | `schedule.write` o `settings.manage` | Cambiar nombre o si hay servicio; eliminar (ajusta los viajes) |
+| POST | /holidays/official | `schedule.write` o `settings.manage` | Agrega los días de descanso obligatorio de la LFT del año |
+
 Rutas por calles: `ROUTING_PROVIDER=osrm` con `ROUTING_URL` (OSRM propio con extracto de
 México) o `straight_line`. Resultados en caché (tabla routing_cache, 30 días); si OSRM falla
 o tarda más de `ROUTING_TIMEOUT_MS`, se usa la línea recta y la operación sigue. Cada versión
@@ -208,6 +214,16 @@ guarda su origen (`routingSource`: osrm, straight_line o manual).
 Vigencia de rutas: la versión regular aplica desde su `validFrom` hasta que empieza otra;
 un cambio temporal vigente gana a la versión regular. Las versiones que ya empezaron no se
 modifican (un cambio crea otra versión) y no se crean versiones en el pasado.
+
+Generación de viajes: un viaje regular por ruta y día (`generation_key` = ruta + fecha). Hay
+viaje si la ruta está activa, la planta tiene acuerdo vigente, el turno trabaja ese día de la
+semana, no es festivo sin servicio y ningún cambio temporal suspende el servicio. Entrada:
+sale a la hora de la primera parada y llega a la hora de entrada del turno; salida: sale a la
+hora de salida del turno y llega a la última parada (horas locales de la planta, con horario
+de verano). Regenerar crea lo que falta, actualiza lo programado y cancela lo que ya no aplica
+(motivo con prefijo «[Automático]»); no toca viajes iniciados, terminados ni cancelados a
+mano, ni fechas pasadas. Una tarea diaria mantiene `TRIP_HORIZON_DAYS` (14) días generados y
+cada cambio de ruta, turno, festivo o cambio temporal ajusta los viajes en la misma operación.
 
 Credencial QR del pasajero: `SL1.<datos en base64url>.<firma Ed25519>`; los datos llevan
 credencial, pasajero, empresa y un valor aleatorio que cambia al reemitirla.
