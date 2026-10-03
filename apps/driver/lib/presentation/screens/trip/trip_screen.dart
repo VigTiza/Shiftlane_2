@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../application/tracking/trip_tracking.dart';
 import '../../../application/trips/trip_providers.dart';
 import '../../../application/trips/trips_controller.dart';
 import '../../../core/errors/app_failure.dart';
@@ -46,11 +47,11 @@ class TripScreen extends ConsumerWidget {
       );
     }
     final next = trip.nextStop;
-    final notice = stopNoticeFor(trip, ref.watch(positionProvider).value);
+    final notice = stopNoticeFor(trip, ref.watch(positionProvider));
     // Al entrar al radio de la parada: vibración y sonido.
     ref.listen(positionProvider, (previous, current) {
-      final before = stopNoticeFor(trip, previous?.value);
-      final now = stopNoticeFor(trip, current.value);
+      final before = stopNoticeFor(trip, previous);
+      final now = stopNoticeFor(trip, current);
       if (now != null && now.atStop && !(before?.atStop ?? false)) {
         unawaited(HapticFeedback.vibrate());
         unawaited(SystemSound.play(SystemSoundType.alert));

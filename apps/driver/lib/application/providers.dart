@@ -5,6 +5,7 @@ import '../core/network/api_client.dart';
 import '../data/local/app_database.dart';
 import '../data/outbox/drift_outbox_repository.dart';
 import '../domain/outbox/outbox_event.dart';
+import 'auth/auth_providers.dart';
 import 'outbox/outbox_service.dart';
 
 /// Configuración del ambiente (se reemplaza en main y en las pruebas).
@@ -35,6 +36,8 @@ final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient.create(
     config,
     readToken: () async => ref.read(accessTokenProvider),
+    refreshToken: () =>
+        ref.read(authControllerProvider.notifier).refreshAccessToken(),
   );
 });
 

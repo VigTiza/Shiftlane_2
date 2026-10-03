@@ -1,24 +1,58 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/errors/app_failure.dart';
 import '../../core/logging/app_logger.dart';
+import '../../data/sync/sync_api.dart';
+import '../../domain/trips/pending_overlay.dart';
 import '../../domain/trips/trip_models.dart';
 import '../providers.dart';
+import '../sync/sync_coordinator.dart';
+import '../tracking/trip_tracking.dart';
 import 'trip_providers.dart';
 
 /// Viajes del día y las acciones del chofer. Cada acción se guarda primero en la cola local
 /// (con su UUID) y se envía en seguida por /sync/batch: con o sin señal el chofer sigue.
+/// La lista se guarda en el celular para abrir sin señal (por ejemplo, tras un reinicio).
 class TripsController extends AsyncNotifier<List<DriverTrip>> {
   final _log = appLogger('trips');
 
   @override
-  Future<List<DriverTrip>> build() =>
-      ref.read(tripRepositoryProvider).todayTrips();
+  Future<List<DriverTrip>> build() => _load();
 
   Future<void> refresh() async {
-    // Se conserva la lista mientras se recarga (sin parpadeo).
-    state = await AsyncValue.guard(
-      () => ref.read(tripRepositoryProvider).todayTrips(),
-    );
+    state = await AsyncValue.guard(_load);
+  }
+
+  /// Del servidor más lo que sigue en la cola; sin señal, la copia guardada.
+  Future<List<DriverTrip>> _load() async {
+    final snapshots = ref.read(tripSnapshotStoreProvider);
+    try {
+      final trips = await ref.read(tripRepositoryProvider).todayTrips();
+      final pending = await ref
+          .read(outboxRepositoryProvider)
+          .pending(limit: 5000, positions: false);
+      final merged = applyPendingEvents(trips, pending);
+      await snapshots.save(merged);
+      return merged;
+    } on AppFailure catch (failure) {
+      final saved = await snapshots.load();
+      if (saved == null) rethrow;
+      _log.info('Viajes desde la copia del celular: ${failure.message}');
+      return saved;
+    }
+  }
+
+  /// Llegadas a parada que el servidor detectó con las posiciones GPS.
+  void applyServerArrivals(List<AutoArrival> arrivals) {
+    for (final arrival in arrivals) {
+      final trip = _trips.where((t) => t.id == arrival.tripId).firstOrNull;
+      if (trip == null || trip.stopsArrived.contains(arrival.stopId)) continue;
+      _replace(
+        trip.copyWith(stopsArrived: {...trip.stopsArrived, arrival.stopId}),
+      );
+    }
   }
 
   List<DriverTrip> get _trips => state.value ?? const [];
@@ -30,6 +64,7 @@ class TripsController extends AsyncNotifier<List<DriverTrip>> {
 
   void _replace(DriverTrip trip) {
     state = AsyncData([for (final t in _trips) t.id == trip.id ? trip : t]);
+    unawaited(ref.read(tripSnapshotStoreProvider).save(_trips));
   }
 
   DriverTrip _byId(String id) => _trips.firstWhere((t) => t.id == id);
@@ -40,9 +75,7 @@ class TripsController extends AsyncNotifier<List<DriverTrip>> {
     Map<String, Object?> data = const {},
     bool withLocation = true,
   }) async {
-    final position = withLocation
-        ? await ref.read(locationSourceProvider).current()
-        : null;
+    final position = withLocation ? ref.read(lastPositionProvider) : null;
     final event = await ref
         .read(outboxServiceProvider)
         .record(
@@ -54,8 +87,9 @@ class TripsController extends AsyncNotifier<List<DriverTrip>> {
             if (position != null) 'lng': position.lng,
           },
         );
-    final results = await ref.read(syncServiceProvider).flush();
-    final result = results[event.id] ?? const ActionResult(SyncStatus.queued);
+    final report = await ref.read(syncCoordinatorProvider.notifier).syncNow();
+    final result =
+        report.results[event.id] ?? const ActionResult(SyncStatus.queued);
     if (!result.accepted) _log.info('$type rechazado: ${result.message}');
     return result;
   }

@@ -9,7 +9,11 @@ import 'package:dio/dio.dart';
 import 'package:shiftlane_driver/application/auth/auth_providers.dart';
 import 'package:shiftlane_driver/application/device_check/device_check_controller.dart';
 import 'package:shiftlane_driver/application/realtime/realtime_providers.dart';
+import 'package:shiftlane_driver/application/sync/sync_coordinator.dart';
+import 'package:shiftlane_driver/application/tracking/trip_tracking.dart';
 import 'package:shiftlane_driver/application/trips/trip_providers.dart';
+import 'package:shiftlane_driver/data/sync/connectivity_monitor.dart';
+import 'package:shiftlane_driver/domain/tracking/gps_fix.dart';
 import 'package:shiftlane_driver/data/realtime/socket_realtime_client.dart';
 import 'package:shiftlane_driver/data/sync/sync_api.dart';
 import 'package:shiftlane_driver/domain/trips/trip_models.dart';
@@ -295,10 +299,13 @@ class FakeTripRepository implements TripRepository {
     ChecklistPoint(key: 'brakes', label: 'Frenos', photoRequired: false),
   ];
   final List<String> uploads = [];
+  bool offline = false;
 
   @override
-  Future<List<DriverTrip>> todayTrips() async =>
-      trips.map(DriverTrip.fromJson).toList();
+  Future<List<DriverTrip>> todayTrips() async {
+    if (offline) throw const NetworkFailure();
+    return trips.map(DriverTrip.fromJson).toList();
+  }
 
   @override
   Future<List<ChecklistPoint>> checklistTemplate() async => template;
@@ -324,11 +331,42 @@ class FakeSyncApi extends SyncApi {
   final List<Map<String, Object?>> received = [];
   int onboard = 0;
 
+  /// Posiciones recibidas en /driver/positions y llegadas que «detecta» el servidor.
+  final List<Map<String, Object?>> positions = [];
+  List<AutoArrival> autoArrivals = [];
+  AppFailure? positionsFailure;
+  int positionBatches = 0;
+
+  @override
+  Future<PositionsReceipt> sendPositions(
+    List<Map<String, Object?>> points,
+  ) async {
+    if (offline) throw const NetworkFailure();
+    if (positionsFailure != null) throw positionsFailure!;
+    calls.add('positions');
+    positionBatches += 1;
+    positions.addAll(points);
+    final arrivals = autoArrivals;
+    autoArrivals = [];
+    return PositionsReceipt(
+      accepted: points.length,
+      duplicates: 0,
+      rejected: 0,
+      autoArrivals: arrivals,
+    );
+  }
+
+  /// Orden de las llamadas ('batch' o 'positions') e intentos de envío de acciones.
+  final List<String> calls = [];
+  int attempts = 0;
+
   List<String> get types => [for (final e in received) e['type']! as String];
 
   @override
   Future<List<SyncEventResult>> send(List<Map<String, Object?>> events) async {
+    attempts += 1;
     if (offline) throw const NetworkFailure();
+    calls.add('batch');
     received.addAll(events);
     return [
       for (final event in events)
@@ -363,21 +401,58 @@ class FakeSyncApi extends SyncApi {
   }
 }
 
-/// GPS de prueba: cada prueba empuja las posiciones que necesite.
-class FakeLocationSource implements LocationSource {
-  final controller = StreamController<({double lat, double lng})>.broadcast();
-  ({double lat, double lng})? last;
+/// GPS de prueba: cada prueba empuja las lecturas que necesite (15 s entre una y otra).
+class FakeLocationTracker implements LocationTracker {
+  FakeLocationTracker() {
+    _controller = StreamController<GpsFix>.broadcast(
+      onListen: () => listening = true,
+      onCancel: () => listening = false,
+    );
+  }
 
-  void moveTo(double lat, double lng) {
-    last = (lat: lat, lng: lng);
-    controller.add(last!);
+  late final StreamController<GpsFix> _controller;
+
+  /// El GPS está encendido (alguien escucha).
+  bool listening = false;
+  DateTime clock = DateTime.utc(2026, 10, 5, 11, 5);
+
+  void moveTo(
+    double lat,
+    double lng, {
+    Duration after = const Duration(seconds: 15),
+    double accuracy = 8,
+  }) {
+    clock = clock.add(after);
+    _controller.add(
+      GpsFix(
+        lat: lat,
+        lng: lng,
+        recordedAt: clock,
+        speedKmh: 32,
+        accuracyM: accuracy,
+      ),
+    );
   }
 
   @override
-  Future<({double lat, double lng})?> current() async => last;
+  Stream<GpsFix> watch() => _controller.stream;
+}
+
+/// Red de prueba: empieza con señal; cada prueba la quita o la regresa.
+class FakeConnectivity implements ConnectivityMonitor {
+  final _controller = StreamController<bool>.broadcast();
+  bool online = true;
+
+  void set(bool value) {
+    online = value;
+    _controller.add(value);
+  }
 
   @override
-  Stream<({double lat, double lng})> watch() => controller.stream;
+  Future<bool> isOnline() async => online;
+
+  @override
+  Stream<bool> get changes => _controller.stream;
 }
 
 class FakeRealtimeClient implements RealtimeClient {
@@ -405,12 +480,17 @@ Future<ProviderContainer> pumpApp(
   FakeTripRepository? trips,
   FakeSyncApi? sync,
   FakeRealtimeClient? realtime,
-  FakeLocationSource? location,
+  FakeLocationTracker? location,
+  FakeConnectivity? connectivity,
+  AppDatabase? database,
 }) async {
   final deviceProbe = probe ?? FakeDeviceProbe();
-  final db = AppDatabase(NativeDatabase.memory());
-  addTearDown(db.close);
+  // Con [database] la prueba maneja la base (por ejemplo, para simular un reinicio).
+  final db = database ?? AppDatabase(NativeDatabase.memory());
+  if (database == null) addTearDown(db.close);
   final container = ProviderContainer(
+    // Sin reintentos automáticos de Riverpod (dejarían temporizadores pendientes).
+    retry: (_, _) => null,
     overrides: [
       appConfigProvider.overrideWithValue(
         AppConfig.fromValues(environment: environment),
@@ -432,8 +512,11 @@ Future<ProviderContainer> pumpApp(
         realtime ?? FakeRealtimeClient(),
       ),
       mapTilesEnabledProvider.overrideWithValue(false),
-      locationSourceProvider.overrideWithValue(
-        location ?? FakeLocationSource(),
+      locationTrackerProvider.overrideWithValue(
+        location ?? FakeLocationTracker(),
+      ),
+      connectivityMonitorProvider.overrideWithValue(
+        connectivity ?? FakeConnectivity(),
       ),
       photoCaptureProvider.overrideWithValue(
         () async => (bytes: <int>[1, 2, 3], name: 'foto.jpg'),

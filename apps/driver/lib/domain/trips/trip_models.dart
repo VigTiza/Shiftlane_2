@@ -1,5 +1,12 @@
 enum TripStatus { scheduled, inProgress, completed, cancelled }
 
+String tripStatusName(TripStatus status) => switch (status) {
+  TripStatus.scheduled => 'scheduled',
+  TripStatus.inProgress => 'in_progress',
+  TripStatus.completed => 'completed',
+  TripStatus.cancelled => 'cancelled',
+};
+
 TripStatus tripStatusFrom(String value) => switch (value) {
   'in_progress' => TripStatus.inProgress,
   'completed' => TripStatus.completed,
@@ -45,6 +52,17 @@ class TripStop {
 
   /// HH:MM programada.
   final String? time;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'sequence': sequence,
+    'name': name,
+    'location': {'lat': lat, 'lng': lng},
+    'radiusMeters': radiusMeters,
+    'times': [
+      if (time != null) {'weekdays': <int>[], 'time': time},
+    ],
+  };
 }
 
 /// Viaje del día del chofer (respuesta de GET /driver/trips).
@@ -95,8 +113,35 @@ class DriverTrip {
           .cast<Map<String, dynamic>>()
           .map(TripStop.fromJson)
           .toList(),
+      stopsArrived:
+          (json['stopsArrived'] as List<dynamic>?)?.cast<String>().toSet() ??
+          const {},
     );
   }
+
+  /// Misma forma que GET /driver/trips (para la copia guardada en el celular).
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'status': tripStatusName(status),
+    'direction': direction,
+    'scheduledStartAt': scheduledStartAt.toUtc().toIso8601String(),
+    'scheduledEndAt': scheduledEndAt.toUtc().toIso8601String(),
+    'canStartFrom': canStartFrom.toUtc().toIso8601String(),
+    'route': routeCode == null ? null : {'code': routeCode, 'name': routeName},
+    'plant': {'name': plantName},
+    'vehicle': vehicleNumber == null && capacity == null
+        ? null
+        : {'economicNumber': vehicleNumber, 'capacity': capacity},
+    'expectedPassengers': expectedPassengers,
+    'onboard': onboard,
+    'stopsArrived': stopsArrived.toList(),
+    'checklist': {
+      'done': checklistDone,
+      'passed': checklistPassed,
+      'exceptionAuthorized': exceptionAuthorized,
+    },
+    'stops': [for (final stop in stops) stop.toJson()],
+  };
 
   final String id;
   final TripStatus status;

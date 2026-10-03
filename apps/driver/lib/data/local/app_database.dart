@@ -22,11 +22,31 @@ class OutboxEvents extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [OutboxEvents])
+/// Copias guardadas de datos del servidor (los viajes del día) para abrir sin señal.
+@DataClassName('SnapshotRow')
+class Snapshots extends Table {
+  TextColumn get key => text()();
+
+  /// Datos en JSON.
+  TextColumn get payload => text()();
+  DateTimeColumn get savedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {key};
+}
+
+@DriftDatabase(tables: [OutboxEvents, Snapshots])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
     : super(executor ?? driftDatabase(name: 'shiftlane'));
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onUpgrade: (m, from, to) async {
+      if (from < 2) await m.createTable(snapshots);
+    },
+  );
 }

@@ -213,7 +213,7 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 | POST | /client-requests/:id/cancel | `plant.requests` | La planta cancela una solicitud pendiente |
 | POST | /client-requests/:id/approve, /reject | `requests.manage` | Aprobar (un viaje extra crea el viaje) o rechazar con respuesta |
 
-| GET | /driver/trips?date= | chofer | Viajes del día (en curso y siguiente arriba) con paradas, unidad, pasajeros esperados y checklist |
+| GET | /driver/trips?date= | chofer | Viajes del día (en curso y siguiente arriba) con paradas, paradas ya visitadas (`stopsArrived`), unidad, pasajeros esperados y checklist |
 | GET | /driver/checklist-template | chofer | Puntos del checklist de la unidad |
 | POST | /driver/trips/:id/photos?kind= | chofer | Foto del viaje (checklist, incident, evidence; JPG, PNG o WebP) |
 | POST | /driver/trips/:id/checklist | chofer | Checklist de la unidad (vale para todos los viajes del día de esa unidad) |

@@ -41,4 +41,62 @@ class SyncApi {
         )
         .toList();
   }
+
+  /// Envía posiciones GPS en lote (máximo [maxPositions]) a `/driver/positions`.
+  Future<PositionsReceipt> sendPositions(
+    List<Map<String, Object?>> points,
+  ) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/driver/positions',
+      body: {
+        'sentAt': DateTime.now().toUtc().toIso8601String(),
+        'points': points,
+      },
+    );
+    return PositionsReceipt.fromJson(response);
+  }
+}
+
+const maxPositions = 2000;
+const maxSyncEvents = 1000;
+
+/// Llegada a una parada que el servidor detectó con las posiciones (geocerca).
+typedef AutoArrival = ({String tripId, String stopId});
+
+class PositionsReceipt {
+  const PositionsReceipt({
+    required this.accepted,
+    required this.duplicates,
+    required this.rejected,
+    this.autoArrivals = const [],
+  });
+
+  factory PositionsReceipt.fromJson(Map<String, dynamic> json) {
+    final rejected = (json['rejected'] as Map? ?? const {}).values.fold<int>(
+      0,
+      (sum, n) => sum + (n as int),
+    );
+    return PositionsReceipt(
+      accepted: json['accepted'] as int? ?? 0,
+      duplicates: json['duplicates'] as int? ?? 0,
+      rejected: rejected,
+      autoArrivals: [
+        for (final trip
+            in (json['trips'] as List? ?? const [])
+                .cast<Map<String, dynamic>>())
+          for (final arrival
+              in (trip['autoArrivals'] as List? ?? const [])
+                  .cast<Map<String, dynamic>>())
+            (
+              tripId: trip['tripId'] as String,
+              stopId: arrival['stopId'] as String,
+            ),
+      ],
+    );
+  }
+
+  final int accepted;
+  final int duplicates;
+  final int rejected;
+  final List<AutoArrival> autoArrivals;
 }

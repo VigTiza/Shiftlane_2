@@ -78,6 +78,7 @@ class PinRejected extends PinOutcome {
 
 class AuthController extends Notifier<AuthState> {
   final _log = appLogger('auth');
+  Future<String?>? _refreshing;
 
   AuthRepository get _repository => ref.read(authRepositoryProvider);
   CredentialStore get _store => ref.read(credentialStoreProvider);
@@ -122,6 +123,37 @@ class AuthController extends Notifier<AuthState> {
       _log.info('No se pudo renovar la sesión: ${failure.message}');
       await _store.clearSession();
       state = const AuthNeedsDriver();
+    }
+  }
+
+  /// Renueva el token cuando venció (o si la app se abrió sin señal). Una sola renovación
+  /// aunque fallen varias peticiones a la vez. Sin señal devuelve null y se sigue adentro;
+  /// si el servidor rechaza la sesión, el chofer vuelve a escribir su PIN.
+  Future<String?> refreshAccessToken() =>
+      _refreshing ??= _refresh().whenComplete(() => _refreshing = null);
+
+  Future<String?> _refresh() async {
+    final saved = await _store.readSession();
+    if (saved == null) return null;
+    try {
+      final tokens = await _repository.refresh(saved.refreshToken);
+      await _signIn(
+        DriverSession(
+          driverId: saved.driverId,
+          fullName: saved.fullName,
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+        ),
+      );
+      return tokens.accessToken;
+    } on NetworkFailure {
+      return null;
+    } on AppFailure catch (failure) {
+      _log.info('La sesión ya no es válida: ${failure.message}');
+      await _store.clearSession();
+      ref.read(accessTokenProvider.notifier).set(null);
+      state = const AuthNeedsDriver();
+      return null;
     }
   }
 

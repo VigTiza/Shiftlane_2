@@ -157,6 +157,8 @@ export const driverTrips = z.object({
         .nullable(),
       expectedPassengers: z.number().int(),
       onboard: z.number().int(),
+      /** Paradas ya visitadas (la app las recupera si el celular se reinicia en el viaje). */
+      stopsArrived: z.array(z.uuid()),
       checklist: z.object({
         done: z.boolean(),
         passed: z.boolean(),

@@ -126,7 +126,7 @@ void main() {
         await outbox.enqueue(type: 'start', tripId: 't', data: {});
         final scan = await outbox.enqueue(type: 'scan', tripId: 't', data: {});
         final gate = await outbox.enqueue(type: 'gate', tripId: 't', data: {});
-        final results = await sync.flush();
+        final results = (await sync.flush()).results;
         expect(results[gate.id]?.message, 'Este QR es de otra planta.');
         expect((await outbox.pending()).map((e) => e.id), [scan.id]);
         expect(api.types, ['start', 'scan', 'gate']);
@@ -137,7 +137,7 @@ void main() {
       final api = FakeSyncApi()..offline = true;
       final sync = SyncService(outbox: outbox, api: api);
       final event = await outbox.enqueue(type: 'start', tripId: 't', data: {});
-      final results = await sync.flush();
+      final results = (await sync.flush()).results;
       expect(results[event.id]?.status, SyncStatus.queued);
       expect(await outbox.pendingCount(), 1);
       api.offline = false;
@@ -294,7 +294,7 @@ void main() {
   ) async {
     _tallScreen(tester);
     final sync = FakeSyncApi();
-    final gps = FakeLocationSource();
+    final gps = FakeLocationTracker();
     await pumpApp(
       tester,
       store: _signedIn(),
@@ -323,6 +323,11 @@ void main() {
       'lat': 31.7403,
       'lng': -106.46,
     });
+    // Las dos lecturas del GPS salieron en lote por /driver/positions.
+    expect(sync.positions.map((p) => (p['lat'], p['tripId'])), [
+      (31.7436, 'trip-1'),
+      (31.7403, 'trip-1'),
+    ]);
   });
 
   testWidgets('durante el viaje: parada, incidente y pánico', (tester) async {

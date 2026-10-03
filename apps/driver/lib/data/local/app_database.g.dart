@@ -562,15 +562,282 @@ class OutboxEventsCompanion extends UpdateCompanion<OutboxEventRow> {
   }
 }
 
+class $SnapshotsTable extends Snapshots
+    with TableInfo<$SnapshotsTable, SnapshotRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SnapshotsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _keyMeta = const VerificationMeta('key');
+  @override
+  late final GeneratedColumn<String> key = GeneratedColumn<String>(
+    'key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _payloadMeta = const VerificationMeta(
+    'payload',
+  );
+  @override
+  late final GeneratedColumn<String> payload = GeneratedColumn<String>(
+    'payload',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _savedAtMeta = const VerificationMeta(
+    'savedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> savedAt = GeneratedColumn<DateTime>(
+    'saved_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [key, payload, savedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'snapshots';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SnapshotRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('key')) {
+      context.handle(
+        _keyMeta,
+        key.isAcceptableOrUnknown(data['key']!, _keyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_keyMeta);
+    }
+    if (data.containsKey('payload')) {
+      context.handle(
+        _payloadMeta,
+        payload.isAcceptableOrUnknown(data['payload']!, _payloadMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_payloadMeta);
+    }
+    if (data.containsKey('saved_at')) {
+      context.handle(
+        _savedAtMeta,
+        savedAt.isAcceptableOrUnknown(data['saved_at']!, _savedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_savedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {key};
+  @override
+  SnapshotRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SnapshotRow(
+      key: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}key'],
+      )!,
+      payload: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payload'],
+      )!,
+      savedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}saved_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SnapshotsTable createAlias(String alias) {
+    return $SnapshotsTable(attachedDatabase, alias);
+  }
+}
+
+class SnapshotRow extends DataClass implements Insertable<SnapshotRow> {
+  final String key;
+
+  /// Datos en JSON.
+  final String payload;
+  final DateTime savedAt;
+  const SnapshotRow({
+    required this.key,
+    required this.payload,
+    required this.savedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['key'] = Variable<String>(key);
+    map['payload'] = Variable<String>(payload);
+    map['saved_at'] = Variable<DateTime>(savedAt);
+    return map;
+  }
+
+  SnapshotsCompanion toCompanion(bool nullToAbsent) {
+    return SnapshotsCompanion(
+      key: Value(key),
+      payload: Value(payload),
+      savedAt: Value(savedAt),
+    );
+  }
+
+  factory SnapshotRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SnapshotRow(
+      key: serializer.fromJson<String>(json['key']),
+      payload: serializer.fromJson<String>(json['payload']),
+      savedAt: serializer.fromJson<DateTime>(json['savedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'key': serializer.toJson<String>(key),
+      'payload': serializer.toJson<String>(payload),
+      'savedAt': serializer.toJson<DateTime>(savedAt),
+    };
+  }
+
+  SnapshotRow copyWith({String? key, String? payload, DateTime? savedAt}) =>
+      SnapshotRow(
+        key: key ?? this.key,
+        payload: payload ?? this.payload,
+        savedAt: savedAt ?? this.savedAt,
+      );
+  SnapshotRow copyWithCompanion(SnapshotsCompanion data) {
+    return SnapshotRow(
+      key: data.key.present ? data.key.value : this.key,
+      payload: data.payload.present ? data.payload.value : this.payload,
+      savedAt: data.savedAt.present ? data.savedAt.value : this.savedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SnapshotRow(')
+          ..write('key: $key, ')
+          ..write('payload: $payload, ')
+          ..write('savedAt: $savedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(key, payload, savedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SnapshotRow &&
+          other.key == this.key &&
+          other.payload == this.payload &&
+          other.savedAt == this.savedAt);
+}
+
+class SnapshotsCompanion extends UpdateCompanion<SnapshotRow> {
+  final Value<String> key;
+  final Value<String> payload;
+  final Value<DateTime> savedAt;
+  final Value<int> rowid;
+  const SnapshotsCompanion({
+    this.key = const Value.absent(),
+    this.payload = const Value.absent(),
+    this.savedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SnapshotsCompanion.insert({
+    required String key,
+    required String payload,
+    required DateTime savedAt,
+    this.rowid = const Value.absent(),
+  }) : key = Value(key),
+       payload = Value(payload),
+       savedAt = Value(savedAt);
+  static Insertable<SnapshotRow> custom({
+    Expression<String>? key,
+    Expression<String>? payload,
+    Expression<DateTime>? savedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (key != null) 'key': key,
+      if (payload != null) 'payload': payload,
+      if (savedAt != null) 'saved_at': savedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SnapshotsCompanion copyWith({
+    Value<String>? key,
+    Value<String>? payload,
+    Value<DateTime>? savedAt,
+    Value<int>? rowid,
+  }) {
+    return SnapshotsCompanion(
+      key: key ?? this.key,
+      payload: payload ?? this.payload,
+      savedAt: savedAt ?? this.savedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (key.present) {
+      map['key'] = Variable<String>(key.value);
+    }
+    if (payload.present) {
+      map['payload'] = Variable<String>(payload.value);
+    }
+    if (savedAt.present) {
+      map['saved_at'] = Variable<DateTime>(savedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SnapshotsCompanion(')
+          ..write('key: $key, ')
+          ..write('payload: $payload, ')
+          ..write('savedAt: $savedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $OutboxEventsTable outboxEvents = $OutboxEventsTable(this);
+  late final $SnapshotsTable snapshots = $SnapshotsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities => [outboxEvents];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [outboxEvents, snapshots];
 }
 
 typedef $$OutboxEventsTableCreateCompanionBuilder =
@@ -860,10 +1127,181 @@ typedef $$OutboxEventsTableProcessedTableManager =
       OutboxEventRow,
       PrefetchHooks Function()
     >;
+typedef $$SnapshotsTableCreateCompanionBuilder = SnapshotsCompanion Function({
+  required String key,
+  required String payload,
+  required DateTime savedAt,
+  Value<int> rowid,
+});
+typedef $$SnapshotsTableUpdateCompanionBuilder = SnapshotsCompanion Function({
+  Value<String> key,
+  Value<String> payload,
+  Value<DateTime> savedAt,
+  Value<int> rowid,
+});
+
+class $$SnapshotsTableFilterComposer
+    extends Composer<_$AppDatabase, $SnapshotsTable> {
+  $$SnapshotsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get key => $composableBuilder(
+    column: $table.key,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get savedAt => $composableBuilder(
+    column: $table.savedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SnapshotsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SnapshotsTable> {
+  $$SnapshotsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get key => $composableBuilder(
+    column: $table.key,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get savedAt => $composableBuilder(
+    column: $table.savedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SnapshotsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SnapshotsTable> {
+  $$SnapshotsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get key =>
+      $composableBuilder(column: $table.key, builder: (column) => column);
+
+  GeneratedColumn<String> get payload =>
+      $composableBuilder(column: $table.payload, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get savedAt =>
+      $composableBuilder(column: $table.savedAt, builder: (column) => column);
+}
+
+class $$SnapshotsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SnapshotsTable,
+          SnapshotRow,
+          $$SnapshotsTableFilterComposer,
+          $$SnapshotsTableOrderingComposer,
+          $$SnapshotsTableAnnotationComposer,
+          $$SnapshotsTableCreateCompanionBuilder,
+          $$SnapshotsTableUpdateCompanionBuilder,
+          (
+            SnapshotRow,
+            BaseReferences<_$AppDatabase, $SnapshotsTable, SnapshotRow>,
+          ),
+          SnapshotRow,
+          PrefetchHooks Function()
+        > {
+  $$SnapshotsTableTableManager(_$AppDatabase db, $SnapshotsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SnapshotsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SnapshotsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SnapshotsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> key = const Value.absent(),
+                Value<String> payload = const Value.absent(),
+                Value<DateTime> savedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SnapshotsCompanion(
+                key: key,
+                payload: payload,
+                savedAt: savedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String key,
+                required String payload,
+                required DateTime savedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => SnapshotsCompanion.insert(
+                key: key,
+                payload: payload,
+                savedAt: savedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$SnapshotsTable, SnapshotRow>(table),
+                  BaseReferences<_$AppDatabase, $SnapshotsTable, SnapshotRow>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SnapshotsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SnapshotsTable,
+      SnapshotRow,
+      $$SnapshotsTableFilterComposer,
+      $$SnapshotsTableOrderingComposer,
+      $$SnapshotsTableAnnotationComposer,
+      $$SnapshotsTableCreateCompanionBuilder,
+      $$SnapshotsTableUpdateCompanionBuilder,
+      (
+        SnapshotRow,
+        BaseReferences<_$AppDatabase, $SnapshotsTable, SnapshotRow>,
+      ),
+      SnapshotRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
   $AppDatabaseManager(this._db);
   $$OutboxEventsTableTableManager get outboxEvents =>
       $$OutboxEventsTableTableManager(_db, _db.outboxEvents);
+  $$SnapshotsTableTableManager get snapshots =>
+      $$SnapshotsTableTableManager(_db, _db.snapshots);
 }

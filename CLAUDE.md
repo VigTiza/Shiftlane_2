@@ -145,9 +145,13 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
 - Pruebas: `flutter test`; la base de drift en pruebas es `AppDatabase(NativeDatabase.memory())`.
   `pumpApp` (test/support/fakes.dart) arma la app con simulados de API, viajes, cola
   (FakeSyncApi), tiempo real, GPS y cámara.
-- Acciones del viaje: siempre `tripsController` → cola local → envío inmediato a
-  `/sync/batch` (sin señal quedan guardadas). Nada de esperar sonido/vibración (`unawaited`):
-  en pruebas esas llamadas nunca responden.
+- Acciones del viaje: siempre `tripsController` → cola local → `syncCoordinator.syncNow()`
+  (acciones por `/sync/batch`, posiciones tipo `position` en lote por `/driver/positions`).
+  La red, los reintentos y el aviso «Sin señal» los maneja `SyncCoordinator`; el GPS
+  (`TripTracking`) se enciende solo con un viaje en curso. Nada de esperar sonido/vibración
+  (`unawaited`): en pruebas esas llamadas nunca responden.
+- Riverpod: un Notifier no puede leer un proveedor que depende de él (CircularDependencyError);
+  separar el estado compartido en un proveedor sin dependencias (p. ej. `lastPositionProvider`).
 
 ## Configuración compartida
 - tsconfig.base.json (estricto), eslint.config.mjs (typescript-eslint con tipos),

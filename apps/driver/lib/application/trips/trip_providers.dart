@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../data/map/route_tile_prefetcher.dart';
 import '../../data/sync/sync_api.dart';
 import '../../data/trips/api_trip_repository.dart';
+import '../../data/trips/trip_snapshot_store.dart';
 import '../../domain/trips/trip_models.dart';
 import '../providers.dart';
 import '../sync/sync_service.dart';
@@ -23,31 +24,8 @@ final syncServiceProvider = Provider<SyncService>(
   ),
 );
 
-/// Posición del celular para las acciones y el aviso de parada (F07-P05 la llena con el GPS).
-abstract interface class LocationSource {
-  Future<({double lat, double lng})?> current();
-
-  /// Posiciones mientras el viaje está en curso.
-  Stream<({double lat, double lng})> watch();
-}
-
-class NoLocationSource implements LocationSource {
-  const NoLocationSource();
-
-  @override
-  Future<({double lat, double lng})?> current() async => null;
-
-  @override
-  Stream<({double lat, double lng})> watch() => const Stream.empty();
-}
-
-final locationSourceProvider = Provider<LocationSource>(
-  (ref) => const NoLocationSource(),
-);
-
-/// Última posición conocida durante el viaje.
-final positionProvider = StreamProvider<({double lat, double lng})>(
-  (ref) => ref.watch(locationSourceProvider).watch(),
+final tripSnapshotStoreProvider = Provider<TripSnapshotStore>(
+  (ref) => TripSnapshotStore(ref.watch(appDatabaseProvider)),
 );
 
 /// Mostrar los mosaicos del mapa (en las pruebas no hay red).

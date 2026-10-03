@@ -1,3 +1,6 @@
+/// Tipo de las posiciones GPS en la cola (se envían en lote a `/driver/positions`).
+const positionEventType = 'position';
+
 /// Evento guardado en el celular para enviarse al servidor (aunque no haya señal).
 /// Su `id` es el UUID que evita duplicados en el servidor (`/sync/batch`).
 class OutboxEvent {
@@ -14,7 +17,7 @@ class OutboxEvent {
 
   final String id;
 
-  /// checklist, start, stop_arrived, scan, incident, panic, gate o finish.
+  /// checklist, start, stop_arrived, scan, incident, panic, gate, finish o position.
   final String type;
 
   /// Orden en que ocurrieron en este celular.
@@ -24,6 +27,8 @@ class OutboxEvent {
   final Map<String, Object?> data;
   final int attempts;
   final String? lastError;
+
+  bool get isPosition => type == positionEventType;
 
   /// Forma en que lo recibe `/sync/batch`.
   Map<String, Object?> toSyncJson() => {
@@ -45,8 +50,9 @@ abstract interface class OutboxRepository {
     DateTime? occurredAt,
   });
 
-  /// Pendientes en el orden en que ocurrieron.
-  Future<List<OutboxEvent>> pending({int limit});
+  /// Pendientes en el orden en que ocurrieron. [positions]: true solo posiciones GPS,
+  /// false solo acciones, null todo.
+  Future<List<OutboxEvent>> pending({int limit, bool? positions});
 
   Future<void> markSent(Iterable<String> ids);
 

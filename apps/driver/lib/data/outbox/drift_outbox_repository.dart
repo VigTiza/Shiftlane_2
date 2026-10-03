@@ -57,10 +57,17 @@ class DriftOutboxRepository implements OutboxRepository {
   }
 
   @override
-  Future<List<OutboxEvent>> pending({int limit = 500}) async {
+  Future<List<OutboxEvent>> pending({int limit = 500, bool? positions}) async {
     final rows =
         await (_db.select(_db.outboxEvents)
               ..where((e) => e.sentAt.isNull())
+              ..where(
+                (e) => switch (positions) {
+                  true => e.type.equals(positionEventType),
+                  false => e.type.equals(positionEventType).not(),
+                  null => const Constant(true),
+                },
+              )
               ..orderBy([(e) => OrderingTerm.asc(e.sequence)])
               ..limit(limit))
             .get();

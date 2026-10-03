@@ -2,8 +2,8 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F07 — App del chofer (Flutter)
-- Último prompt completado: F07-P04 Pantalla principal, checklist y viaje
-- Siguiente prompt: F07-P05 Ubicación en segundo plano y modo sin señal
+- Último prompt completado: F07-P05 Ubicación en segundo plano y modo sin señal
+- Siguiente prompt: F07-P06 Escaneo de pasajeros
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -181,7 +181,42 @@
   al caché de flutter_map. El aviso de parada se calcula en el celular con la distancia a
   la siguiente parada (800 m para avisar, radio de la parada para «llegaste»).
 
+- 2026-10-03 Posiciones del chofer: entran a la misma cola local (tipo `position`) pero salen
+  en lote por /driver/positions (el endpoint de GPS con duplicados y corrección de reloj), no
+  por /sync/batch: así la bitácora inmutable de sincronización no se llena con miles de
+  puntos por viaje. Cada sincronización manda primero las acciones (el inicio del viaje debe
+  llegar antes que sus posiciones). Servicio en primer plano con el de geolocator (sin otro
+  plugin). Una posición cada 10 s con precisión ≤ 100 m. Reintentos 5 s → 2 min. Tras un 401
+  la app renueva la sesión una vez y repite la petición. La lista de viajes se guarda en
+  drift (copia local de 24 h) y, con señal, se le aplican los eventos que siguen en la cola.
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F07-P05 Ubicación en segundo plano y modo sin señal
+- Hecho: GPS solo durante el viaje (geolocator con servicio en primer plano y notificación
+  «Viaje en curso», permisos de Android); cola local para todo evento, incluidas las
+  posiciones; envío en lote con reintentos espaciados, al recuperar la red y al volver a la
+  app, sin duplicados (UUID por evento); aviso «Sin señal — tus datos están guardados» con
+  pendientes; copia local de los viajes para abrir sin señal tras un reinicio; llegadas a
+  parada detectadas por el servidor; renovación del token ante un 401. API: /driver/trips
+  devuelve `stopsArrived`.
+- Archivos principales: apps/driver/lib/application/{sync,tracking}/*,
+  lib/data/{sync/connectivity_monitor,tracking/geolocator_tracker,trips/trip_snapshot_store}.dart,
+  lib/domain/{tracking/gps_fix,trips/pending_overlay}.dart, lib/core/network/api_client.dart,
+  lib/presentation/widgets/offline_banner.dart, lib/data/local/app_database.dart (versión 2),
+  apps/api/src/modules/trips/{schemas,driver-service}.ts.
+- Pruebas agregadas / resultado: 19 nuevas en Flutter (posiciones cada 10 s, límites del punto,
+  copia local, capa de pendientes, actualización de la base, acciones antes que posiciones,
+  sin conexión y reconexión, llegadas del servidor, posiciones que nunca se aceptan, token
+  vencido, renovación única, GPS solo en el viaje, aviso sin señal, reintentos 5 s/10 s,
+  reinicio del celular a mitad del viaje sin señal); 73 en total. API: paradas visitadas en
+  la lista del chofer.
+- Problemas encontrados y cómo se resolvieron: dependencia circular de Riverpod (la posición
+  dependía del seguimiento, que depende de los viajes) → proveedor aparte para la última
+  lectura; carrera al abrir sin red → primero se lee la red y luego la sesión.
+- Pendiente para después: probar en celulares reales que el sistema no detenga el servicio
+  (APK de F07-P07); eventos de un chofer que se quedan en un celular compartido si entra otro
+  antes de sincronizar (el servidor los rechaza por no ser su viaje).
+
 ### 2026-10-03 — F07-P04 Pantalla principal, checklist y viaje
 - Hecho: inicio con Iniciar viaje / Escanear pasajero / Terminar viaje y lista de viajes del
   día; checklist según la plantilla de la empresa con fotos obligatorias (cámara) y notas;

@@ -192,6 +192,7 @@ describe('ciclo de vida del viaje desde la app del chofer', () => {
       route: { code: 'CIC-01' },
       vehicle: { capacity: 2 },
       expectedPassengers: 1,
+      stopsArrived: [],
       checklist: { done: false },
     });
     expect((listed as unknown as { stops: unknown[] }).stops).toHaveLength(2);
@@ -223,6 +224,15 @@ describe('ciclo de vida del viaje desde la app del chofer', () => {
     const again = await post(`${base}/stops`, driver.auth, { stopId: stops[0]!.id }).expect(200);
     expect(again.body.duplicate).toBe(true);
     await post(`${base}/stops`, driver.auth, { stopId: randomUUID() }).expect(400);
+    // Si el celular se reinicia a mitad del viaje, la lista trae las paradas ya visitadas.
+    const midTrip = await request(app.server)
+      .get('/driver/trips')
+      .set('authorization', driver.auth)
+      .expect(200);
+    expect((midTrip.body.trips as { id: string }[]).find((t) => t.id === trip.id)).toMatchObject({
+      status: 'in_progress',
+      stopsArrived: [stops[0]!.id],
+    });
 
     // Pasajero de la ruta, escaneado junto a la primera parada.
     const near = { lat: stops[0]!.location.lat + 0.0002, lng: stops[0]!.location.lng };

@@ -7,11 +7,20 @@ import '../logging/app_logger.dart';
 /// Lee el token de acceso vigente (null si no hay sesión).
 typedef TokenReader = Future<String?> Function();
 
-/// Cliente de la API de Shiftlane: agrega el token, registra y traduce los errores.
+/// Renueva la sesión y devuelve el token nuevo (null si no se pudo).
+typedef TokenRefresher = Future<String?> Function();
+
+/// Cliente de la API de Shiftlane: agrega el token, registra y traduce los errores. Si el
+/// token venció (401), renueva la sesión una vez y repite la petición.
 class ApiClient {
   ApiClient(this.dio);
 
-  factory ApiClient.create(AppConfig config, {TokenReader? readToken}) {
+  factory ApiClient.create(
+    AppConfig config, {
+    TokenReader? readToken,
+    TokenRefresher? refreshToken,
+    HttpClientAdapter? adapter,
+  }) {
     final dio = Dio(
       BaseOptions(
         baseUrl: config.apiBaseUrl.toString(),
@@ -22,6 +31,7 @@ class ApiClient {
         responseType: ResponseType.json,
       ),
     );
+    if (adapter != null) dio.httpClientAdapter = adapter;
     final log = appLogger('api');
     dio.interceptors.add(
       InterceptorsWrapper(
@@ -30,12 +40,35 @@ class ApiClient {
           if (token != null) options.headers['authorization'] = 'Bearer $token';
           handler.next(options);
         },
-        onError: (error, handler) {
+        onError: (error, handler) async {
+          final options = error.requestOptions;
           log.warning(
-            '${error.requestOptions.method} ${error.requestOptions.path} → '
+            '${options.method} ${options.path} → '
             '${error.response?.statusCode ?? error.type.name}',
           );
-          handler.next(error);
+          final expired =
+              error.response?.statusCode == 401 &&
+              refreshToken != null &&
+              options.extra['retried'] != true &&
+              !options.path.startsWith('/auth/');
+          if (!expired) return handler.next(error);
+          final token = await refreshToken();
+          // Un formulario con archivo no se puede reenviar: el siguiente intento ya lleva
+          // el token nuevo.
+          if (token == null || options.data is FormData) {
+            return handler.next(error);
+          }
+          try {
+            final retried = await dio.fetch<dynamic>(
+              options.copyWith(
+                headers: {...options.headers, 'authorization': 'Bearer $token'},
+                extra: {...options.extra, 'retried': true},
+              ),
+            );
+            handler.resolve(retried);
+          } on DioException catch (retryError) {
+            handler.next(retryError);
+          }
         },
       ),
     );

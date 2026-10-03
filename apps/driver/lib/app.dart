@@ -4,12 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'application/auth/auth_controller.dart';
 import 'application/auth/auth_providers.dart';
 import 'application/realtime/realtime_providers.dart';
+import 'application/sync/sync_coordinator.dart';
+import 'application/tracking/trip_tracking.dart';
 import 'application/trips/trips_controller.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'data/realtime/socket_realtime_client.dart';
+import 'presentation/widgets/offline_banner.dart';
 
 class ShiftlaneDriverApp extends ConsumerStatefulWidget {
   const ShiftlaneDriverApp({super.key});
@@ -19,13 +23,29 @@ class ShiftlaneDriverApp extends ConsumerStatefulWidget {
 }
 
 class _ShiftlaneDriverAppState extends ConsumerState<ShiftlaneDriverApp> {
+  late final SyncCoordinator _sync;
+  late final AppLifecycleListener _lifecycle;
+
   @override
   void initState() {
     super.initState();
-    // ¿Celular vinculado? ¿Sesión que se pueda renovar?
-    Future.microtask(
-      () => ref.read(authControllerProvider.notifier).bootstrap(),
+    _sync = ref.read(syncCoordinatorProvider.notifier);
+    // Al volver a la app se envía lo pendiente.
+    _lifecycle = AppLifecycleListener(
+      onResume: () => unawaited(_sync.syncNow()),
     );
+    // Vigilar la red para la cola. ¿Celular vinculado? ¿Sesión que se pueda renovar?
+    Future.microtask(() async {
+      await _sync.start();
+      await ref.read(authControllerProvider.notifier).bootstrap();
+    });
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    _sync.stop();
+    super.dispose();
   }
 
   /// Avisos del despachador en pantalla, con sonido y vibración.
@@ -82,12 +102,21 @@ class _ShiftlaneDriverAppState extends ConsumerState<ShiftlaneDriverApp> {
       final event = next.value;
       if (event != null) _onRealtime(event);
     });
+    // Al entrar (o al renovar una sesión que abrió sin señal) se envía lo guardado.
+    ref.listen(authControllerProvider, (previous, next) {
+      final wasOut = previous is! AuthSignedIn || previous.offline;
+      if (next is AuthSignedIn && wasOut) unawaited(_sync.syncNow());
+    });
+    // El GPS sigue al viaje en curso (se enciende y apaga solo).
+    ref.listen(tripTrackingProvider, (_, _) {});
     return MaterialApp.router(
       title: 'Shiftlane Chofer',
       debugShowCheckedModeBanner: false,
       theme: buildShiftlaneTheme(),
       routerConfig: ref.watch(routerProvider),
       locale: const Locale('es', 'MX'),
+      builder: (context, child) =>
+          OfflineBanner(child: child ?? const SizedBox.shrink()),
     );
   }
 }

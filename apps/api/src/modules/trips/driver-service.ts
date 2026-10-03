@@ -174,19 +174,25 @@ export function createDriverTripsService(deps: {
     }
   }
 
+  /** Paradas visitadas en el orden en que llegó. */
+  async function stopsArrived(tx: DbTransaction, tripId: string) {
+    const arrivals = await tx.tripEvent.findMany({
+      where: { tripId, type: 'stop_arrived' },
+      select: { data: true },
+      orderBy: { occurredAt: 'asc' },
+    });
+    return arrivals.map((a) => (a.data as { stopId: string }).stopId);
+  }
+
   /** Estado del viaje que ve el chofer después de cada acción. */
   async function state(tx: DbTransaction, tripId: string, duplicate = false) {
     const trip = await tx.trip.findFirstOrThrow({
       where: { id: tripId },
       include: { vehicle: { select: { capacity: true } } },
     });
-    const [onboard, arrivals] = [
+    const [onboard, arrived] = [
       await tx.boarding.count({ where: { tripId } }),
-      await tx.tripEvent.findMany({
-        where: { tripId, type: 'stop_arrived' },
-        select: { data: true },
-        orderBy: { occurredAt: 'asc' },
-      }),
+      await stopsArrived(tx, tripId),
     ];
     return {
       id: trip.id,
@@ -196,7 +202,7 @@ export function createDriverTripsService(deps: {
       actualEndAt: trip.actualEndAt,
       onboard,
       capacity: trip.vehicle?.capacity ?? null,
-      stopsArrived: arrivals.map((a) => (a.data as { stopId: string }).stopId),
+      stopsArrived: arrived,
       duplicate,
     };
   }
@@ -275,6 +281,7 @@ export function createDriverTripsService(deps: {
           vehicle: trip.vehicle,
           expectedPassengers: expected,
           onboard,
+          stopsArrived: trip.status === 'scheduled' ? [] : await stopsArrived(tx, trip.id),
           checklist: {
             done: checklist !== null,
             passed: checklist?.passed ?? false,
