@@ -15,22 +15,6 @@ jobs:
   node:
     name: Lint, tipos y pruebas (Node)
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgis/postgis:16-3.5
-        env:
-          POSTGRES_USER: shiftlane
-          POSTGRES_PASSWORD: shiftlane
-          POSTGRES_DB: shiftlane_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U shiftlane -d shiftlane_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
-    env:
-      DATABASE_URL: postgresql://shiftlane:shiftlane@localhost:5432/shiftlane_test
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -49,6 +33,7 @@ jobs:
       - name: Documentos de referencia
         run: pnpm docs:verificar
       - name: Pruebas
+        # apps/api levanta PostgreSQL + PostGIS con Testcontainers (Docker del runner).
         run: pnpm -r --if-present run test
 
   driver:

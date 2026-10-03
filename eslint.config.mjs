@@ -28,6 +28,15 @@ export default tseslint.config(
     ...tseslint.configs.disableTypeChecked,
   },
   {
+    // En las pruebas las respuestas HTTP llegan como `any`; las aserciones validan su forma.
+    files: ['**/*.test.ts', '**/test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+    },
+  },
+  {
     files: ['apps/api/**', 'eslint.config.mjs'],
     languageOptions: { globals: globals.node },
   },

@@ -1,1 +1,1 @@
-export { formatMxn } from './money.js';
+export { formatMxn } from './money.ts';

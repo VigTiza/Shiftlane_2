@@ -2,8 +2,8 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F01 — Núcleo del backend
-- Último prompt completado: F00-P03
-- Siguiente prompt: F01-P01 Esqueleto de la API
+- Último prompt completado: F01-P01
+- Siguiente prompt: F01-P02 Esquema de base de datos y seguridad por filas
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -44,8 +44,28 @@
   shiftlane_driver, solo Android). El applicationId mx.shiftlane.shiftlane_driver puede
   cambiarse antes de publicar en Google Play (F21).
 - 2026-10-03 El usuario autorizó, solo en esta sesión, avanzar todos los prompts posibles.
+- 2026-10-03 La API corre con Node 24 directamente sobre TypeScript, sin compilar
+  (docs/decisiones/0001). Imports con extensión .ts en todo el monorepo.
+- 2026-10-03 Pruebas de la API con PostgreSQL real: base temporal con TEST_DATABASE_URL o
+  Testcontainers (docs/decisiones/0002). El CI ya no usa contenedor de servicio.
 
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F01-P01 Esqueleto de la API
+- Hecho: Fastify 5 + fastify-type-provider-zod (Zod 4 con mensajes en español). Config de
+  entorno validada con Zod (src/config/env.ts), Pino con datos sensibles ocultos, manejador
+  central de errores en español, Helmet, CORS por lista de orígenes, límite de peticiones
+  (429 en español; /health y /ready exentos), x-request-id, OpenAPI en /docs. Módulo
+  health con /health (vida) y /ready (base de datos). Scripts dev/start con `node`.
+- Archivos principales: apps/api/src/{app,server}.ts, src/config/env.ts, src/lib/*,
+  src/plugins/error-handler.ts, src/modules/health/*, test/global-setup.ts, test/helpers/*.
+- Pruebas agregadas / resultado: 17 pruebas en la API (config, health/ready con base real y
+  sin base, 404, errores de negocio e internos, validación, JSON inválido, encabezados,
+  CORS, OpenAPI, límite). Todas pasan. Se probó el servidor real con curl.
+- Problemas encontrados y cómo se resolvieron: reglas no-unsafe de ESLint con las respuestas
+  de Supertest (se relajaron solo en pruebas); require-await en el plugin de rutas (se usó
+  la forma con callback).
+- Pendiente para después: correr las pruebas con Testcontainers cuando Docker funcione.
+
 ### 2026-10-03 — F00-P03 Entorno local, calidad de código e integración continua
 - Hecho: infra/docker-compose.dev.yml (postgis/postgis:16-3.5, redis:8.10-alpine,
   axllent/mailpit:v1.31, puertos solo en 127.0.0.1, chequeos de salud) e infra/.env.example.

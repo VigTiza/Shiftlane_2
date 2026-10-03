@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatMxn } from './money.js';
+import { formatMxn } from './money.ts';
 
 describe('formatMxn', () => {
   it('formatea pesos con separador de miles y dos decimales', () => {

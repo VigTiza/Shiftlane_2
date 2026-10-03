@@ -77,6 +77,17 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
 - Un solo paquete: `pnpm --filter @shiftlane/api test` (lo mismo con web, rider, shared, landing).
 - CI: .github/workflows/ci.yml (Node con PostgreSQL+PostGIS en contenedor, y Flutter).
 
+## Convenciones de la API (apps/api)
+- Corre con `node src/server.ts` sin compilar (docs/decisiones/0001): imports relativos con
+  extensión `.ts`, sin `enum`/`namespace`/propiedades de parámetro (usar `as const`).
+- Módulos en src/modules/<modulo>/: routes.ts, service.ts, schemas.ts y tests/.
+- Esquemas con `z` importado de src/lib/zod.ts (mensajes en español). Rutas tipadas con
+  fastify-type-provider-zod; toda ruta declara `schema` (entrada y respuesta) y `tags`.
+- Errores esperados: clases de src/lib/errors.ts (mensaje en español para el usuario). El
+  manejador central da el formato `{ error: { code, message, details? }, requestId }`.
+- Pruebas con Vitest + Supertest; la base real llega con `inject('databaseUrl')` y la app de
+  prueba con test/helpers/app.ts (docs/decisiones/0002).
+
 ## Configuración compartida
 - tsconfig.base.json (estricto), eslint.config.mjs (typescript-eslint con tipos),
   .prettierrc.json. Versiones comunes en `catalog:` de pnpm-workspace.yaml.
