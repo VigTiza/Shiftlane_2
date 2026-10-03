@@ -44,6 +44,13 @@ model Tenant {
   createdClientOrgs   ClientOrg[]              @relation("ClientOrgCreatedBy")
   drivers             Driver[]
   clientRequests      ClientRequest[]
+  tripEvents          TripEvent[]
+  checklistTemplates  ChecklistTemplate[]
+  checklistResults    ChecklistResult[]
+  tripPhotos          TripPhoto[]
+  boardings           Boarding[]
+  incidents           Incident[]
+  panicEvents         PanicEvent[]
   driverPins          DriverPin[]
   driverEnrollments   DriverEnrollment[]
   devices             Device[]
@@ -401,15 +408,18 @@ model Driver {
   updatedAt             DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt             DateTime?    @map("deleted_at") @db.Timestamptz(3)
 
-  tenant          Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  habitualVehicle Vehicle?           @relation(fields: [habitualVehicleId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  pin             DriverPin?
-  enrollments     DriverEnrollment[]
-  devices         DriverDevice[]
-  sessions        Session[]
-  documents       DriverDocument[]
-  habitualRoutes  Route[]            @relation("RouteHabitualDriver")
-  trips           Trip[]
+  tenant           Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  habitualVehicle  Vehicle?           @relation(fields: [habitualVehicleId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  pin              DriverPin?
+  enrollments      DriverEnrollment[]
+  devices          DriverDevice[]
+  sessions         Session[]
+  documents        DriverDocument[]
+  habitualRoutes   Route[]            @relation("RouteHabitualDriver")
+  trips            Trip[]
+  checklistResults ChecklistResult[]
+  incidents        Incident[]
+  panicEvents      PanicEvent[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, employeeNumber])
@@ -524,6 +534,8 @@ model Passenger {
   resolvedBadges   ProvisionalBadge[]
   routeAssignments RoutePassenger[]
 
+  boardings Boarding[]
+
   @@unique([clientOrgId, employeeNumber])
   @@index([plantId])
   @@map("passengers")
@@ -561,11 +573,12 @@ model Vehicle {
   updatedAt           DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt           DateTime?     @map("deleted_at") @db.Timestamptz(3)
 
-  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  documents       VehicleDocument[]
-  habitualDrivers Driver[]
-  habitualRoutes  Route[]           @relation("RouteHabitualVehicle")
-  trips           Trip[]
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  documents        VehicleDocument[]
+  habitualDrivers  Driver[]
+  habitualRoutes   Route[]           @relation("RouteHabitualVehicle")
+  trips            Trip[]
+  checklistResults ChecklistResult[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, economicNumber])
@@ -657,6 +670,7 @@ model PlantGate {
 
   clientOrg ClientOrg @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
   plant     Plant     @relation(fields: [plantId, clientOrgId], references: [id, clientOrgId], onDelete: Restrict)
+  arrivals  Trip[]
 
   @@index([plantId])
   @@map("plant_gates")
@@ -929,6 +943,8 @@ model ProvisionalBadge {
   plant             Plant      @relation(fields: [plantId, clientOrgId], references: [id, clientOrgId], onDelete: Restrict)
   resolvedPassenger Passenger? @relation(fields: [resolvedPassengerId], references: [id], onDelete: SetNull)
 
+  boardings Boarding[]
+
   @@unique([clientOrgId, value])
   @@index([plantId, status])
   @@map("provisional_badges")
@@ -1097,6 +1113,7 @@ model Stop {
   tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   routeVersion RouteVersion    @relation(fields: [routeVersionId, tenantId], references: [id, tenantId], onDelete: Cascade)
   times        RouteStopTime[]
+  boardings    Boarding[]
 
   @@unique([id, tenantId])
   @@unique([routeVersionId, sequence])
@@ -1223,45 +1240,61 @@ enum TripAssignmentSource {
 
 /// Viaje programado. Los regulares los genera el sistema (generation_key = ruta + día).
 model Trip {
-  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId            String                @map("tenant_id") @db.Uuid
-  plantId             String                @map("plant_id") @db.Uuid
-  routeId             String?               @map("route_id") @db.Uuid
-  routeVersionId      String?               @map("route_version_id") @db.Uuid
-  shiftId             String?               @map("shift_id") @db.Uuid
-  temporaryChangeId   String?               @map("temporary_change_id") @db.Uuid
-  kind                TripKind              @default(regular)
-  status              TripStatus            @default(scheduled)
-  direction           RouteDirection
-  serviceDate         DateTime              @map("service_date") @db.Date
-  scheduledStartAt    DateTime              @map("scheduled_start_at") @db.Timestamptz(3)
-  scheduledEndAt      DateTime              @map("scheduled_end_at") @db.Timestamptz(3)
-  isHoliday           Boolean               @default(false) @map("is_holiday")
-  driverId            String?               @map("driver_id") @db.Uuid
-  vehicleId           String?               @map("vehicle_id") @db.Uuid
-  assignmentSource    TripAssignmentSource? @map("assignment_source")
-  assignedAt          DateTime?             @map("assigned_at") @db.Timestamptz(3)
-  assignedByUserId    String?               @map("assigned_by_user_id") @db.Uuid
+  id                         String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                   String                @map("tenant_id") @db.Uuid
+  plantId                    String                @map("plant_id") @db.Uuid
+  routeId                    String?               @map("route_id") @db.Uuid
+  routeVersionId             String?               @map("route_version_id") @db.Uuid
+  shiftId                    String?               @map("shift_id") @db.Uuid
+  temporaryChangeId          String?               @map("temporary_change_id") @db.Uuid
+  kind                       TripKind              @default(regular)
+  status                     TripStatus            @default(scheduled)
+  direction                  RouteDirection
+  serviceDate                DateTime              @map("service_date") @db.Date
+  scheduledStartAt           DateTime              @map("scheduled_start_at") @db.Timestamptz(3)
+  scheduledEndAt             DateTime              @map("scheduled_end_at") @db.Timestamptz(3)
+  isHoliday                  Boolean               @default(false) @map("is_holiday")
+  driverId                   String?               @map("driver_id") @db.Uuid
+  vehicleId                  String?               @map("vehicle_id") @db.Uuid
+  assignmentSource           TripAssignmentSource? @map("assignment_source")
+  assignedAt                 DateTime?             @map("assigned_at") @db.Timestamptz(3)
+  assignedByUserId           String?               @map("assigned_by_user_id") @db.Uuid
   /// Viajes extra: motivo, solicitud de la planta que lo originó y pasajeros estimados.
-  extraReason         ExtraTripReason?      @map("extra_reason")
-  clientRequestId     String?               @map("client_request_id") @db.Uuid
-  requestedPassengers Int?                  @map("requested_passengers")
-  createdByUserId     String?               @map("created_by_user_id") @db.Uuid
+  extraReason                ExtraTripReason?      @map("extra_reason")
+  clientRequestId            String?               @map("client_request_id") @db.Uuid
+  requestedPassengers        Int?                  @map("requested_passengers")
+  createdByUserId            String?               @map("created_by_user_id") @db.Uuid
+  /// Ejecución: inicio y fin reales, y llegada comprobada con el QR de la puerta.
+  actualStartAt              DateTime?             @map("actual_start_at") @db.Timestamptz(3)
+  actualEndAt                DateTime?             @map("actual_end_at") @db.Timestamptz(3)
+  arrivedAt                  DateTime?             @map("arrived_at") @db.Timestamptz(3)
+  arrivalGateId              String?               @map("arrival_gate_id") @db.Uuid
+  /// Salida autorizada por el despachador aunque el checklist tenga puntos sin aprobar.
+  checklistExceptionAt       DateTime?             @map("checklist_exception_at") @db.Timestamptz(3)
+  checklistExceptionByUserId String?               @map("checklist_exception_by_user_id") @db.Uuid
+  checklistExceptionReason   String?               @map("checklist_exception_reason")
   /// Llave de idempotencia de los viajes regulares: "<ruta>:<AAAA-MM-DD>".
-  generationKey       String?               @unique @map("generation_key")
-  cancelReason        String?               @map("cancel_reason")
-  notes               String?
-  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  generationKey              String?               @unique @map("generation_key")
+  cancelReason               String?               @map("cancel_reason")
+  notes                      String?
+  createdAt                  DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                  DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  plant         Plant          @relation(fields: [plantId], references: [id], onDelete: Restrict)
-  route         Route?         @relation(fields: [routeId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  routeVersion  RouteVersion?  @relation(fields: [routeVersionId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  shift         Shift?         @relation(fields: [shiftId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  driver        Driver?        @relation(fields: [driverId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  vehicle       Vehicle?       @relation(fields: [vehicleId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  clientRequest ClientRequest? @relation(fields: [clientRequestId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  plant            Plant             @relation(fields: [plantId], references: [id], onDelete: Restrict)
+  route            Route?            @relation(fields: [routeId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  routeVersion     RouteVersion?     @relation(fields: [routeVersionId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  shift            Shift?            @relation(fields: [shiftId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  driver           Driver?           @relation(fields: [driverId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  vehicle          Vehicle?          @relation(fields: [vehicleId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  clientRequest    ClientRequest?    @relation(fields: [clientRequestId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  arrivalGate      PlantGate?        @relation(fields: [arrivalGateId], references: [id], onDelete: Restrict)
+  events           TripEvent[]
+  checklistResults ChecklistResult[]
+  photos           TripPhoto[]
+  boardings        Boarding[]
+  incidents        Incident[]
+  panicEvents      PanicEvent[]
 
   @@unique([id, tenantId])
   @@index([tenantId, serviceDate])
@@ -1339,4 +1372,220 @@ model ClientRequest {
   @@index([tenantId, status])
   @@index([clientOrgId, status])
   @@map("client_requests")
+}
+
+// ---------------------------------------------------------------------------
+// Ejecución de viajes: historial, checklist, fotos, abordajes, incidentes y pánico (F05-P01)
+// ---------------------------------------------------------------------------
+
+enum TripEventType {
+  checklist_submitted
+  checklist_exception
+  started
+  stop_arrived
+  passenger_scanned
+  incident_reported
+  panic
+  gate_arrived
+  finished
+  cancelled
+}
+
+/// Historial inmutable de un viaje. client_event_id (UUID del celular) evita duplicados al
+/// reenviar eventos guardados sin señal.
+model TripEvent {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String        @map("tenant_id") @db.Uuid
+  tripId        String        @map("trip_id") @db.Uuid
+  type          TripEventType
+  /// Cuándo ocurrió (hora del celular o del servidor) y cuándo llegó al servidor.
+  occurredAt    DateTime      @map("occurred_at") @db.Timestamptz(3)
+  receivedAt    DateTime      @default(now()) @map("received_at") @db.Timestamptz(3)
+  /// driver, user o system.
+  actorType     String        @map("actor_type")
+  actorId       String?       @map("actor_id") @db.Uuid
+  clientEventId String?       @map("client_event_id") @db.Uuid
+  lat           Float?
+  lng           Float?
+  data          Json?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  trip   Trip   @relation(fields: [tripId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([tripId, clientEventId])
+  @@index([tripId, occurredAt])
+  @@map("trip_events")
+}
+
+/// Plantilla del checklist de la unidad (una activa por transportista).
+model ChecklistTemplate {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @unique @map("tenant_id") @db.Uuid
+  /// [{ key, label, photoRequired }]
+  items     Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@map("checklist_templates")
+}
+
+/// Revisión de la unidad antes de salir. Vale para todos los viajes del día de esa unidad.
+model ChecklistResult {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  tripId        String?  @map("trip_id") @db.Uuid
+  driverId      String   @map("driver_id") @db.Uuid
+  vehicleId     String   @map("vehicle_id") @db.Uuid
+  serviceDate   DateTime @map("service_date") @db.Date
+  passed        Boolean
+  /// [{ key, label, ok, note, photoId }]
+  items         Json
+  submittedAt   DateTime @map("submitted_at") @db.Timestamptz(3)
+  clientEventId String?  @unique @map("client_event_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  trip    Trip?   @relation(fields: [tripId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  driver  Driver  @relation(fields: [driverId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  vehicle Vehicle @relation(fields: [vehicleId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@index([vehicleId, serviceDate])
+  @@map("checklist_results")
+}
+
+enum TripPhotoKind {
+  checklist
+  incident
+  evidence
+}
+
+/// Foto tomada por el chofer durante un viaje (checklist, incidente o evidencia).
+model TripPhoto {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String        @map("tenant_id") @db.Uuid
+  tripId      String        @map("trip_id") @db.Uuid
+  driverId    String?       @map("driver_id") @db.Uuid
+  kind        TripPhotoKind
+  storageKey  String        @map("storage_key")
+  contentType String        @map("content_type")
+  sizeBytes   Int           @map("size_bytes")
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  trip   Trip   @relation(fields: [tripId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@index([tripId])
+  @@map("trip_photos")
+}
+
+enum BoardingMethod {
+  shiftlane_qr
+  badge
+  manual
+}
+
+enum BoardingResult {
+  /// Pasajero de esta ruta.
+  ok
+  /// Pasajero registrado de otra ruta o turno.
+  other_route
+  /// Gafete no registrado: queda como provisional.
+  unregistered
+}
+
+/// Abordaje de un pasajero (o gafete provisional) en un viaje, con la parada detectada.
+model Boarding {
+  id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String         @map("tenant_id") @db.Uuid
+  tripId             String         @map("trip_id") @db.Uuid
+  passengerId        String?        @map("passenger_id") @db.Uuid
+  provisionalBadgeId String?        @map("provisional_badge_id") @db.Uuid
+  /// Parada más cercana al escaneo (el chofer nunca elige la parada).
+  stopId             String?        @map("stop_id") @db.Uuid
+  method             BoardingMethod
+  result             BoardingResult
+  scannedAt          DateTime       @map("scanned_at") @db.Timestamptz(3)
+  lat                Float?
+  lng                Float?
+  clientEventId      String?        @map("client_event_id") @db.Uuid
+  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  trip             Trip              @relation(fields: [tripId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  passenger        Passenger?        @relation(fields: [passengerId], references: [id], onDelete: Restrict)
+  provisionalBadge ProvisionalBadge? @relation(fields: [provisionalBadgeId], references: [id], onDelete: Restrict)
+  stop             Stop?             @relation(fields: [stopId], references: [id], onDelete: Restrict)
+
+  @@unique([tripId, passengerId])
+  @@unique([tripId, provisionalBadgeId])
+  @@unique([tripId, clientEventId])
+  @@index([tripId, scannedAt])
+  @@map("boardings")
+}
+
+enum IncidentType {
+  traffic
+  mechanical
+  accident
+  passenger
+  forced_detour
+  other
+}
+
+enum IncidentStatus {
+  open
+  resolved
+}
+
+/// Incidente reportado por el chofer (con foto y ubicación) y su atención en el panel.
+model Incident {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String         @map("tenant_id") @db.Uuid
+  tripId           String         @map("trip_id") @db.Uuid
+  driverId         String?        @map("driver_id") @db.Uuid
+  type             IncidentType
+  description      String?
+  photoIds         String[]       @default([]) @map("photo_ids") @db.Uuid
+  lat              Float?
+  lng              Float?
+  occurredAt       DateTime       @map("occurred_at") @db.Timestamptz(3)
+  status           IncidentStatus @default(open)
+  resolution       String?
+  resolvedAt       DateTime?      @map("resolved_at") @db.Timestamptz(3)
+  resolvedByUserId String?        @map("resolved_by_user_id") @db.Uuid
+  clientEventId    String?        @unique @map("client_event_id") @db.Uuid
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  trip   Trip    @relation(fields: [tripId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  driver Driver? @relation(fields: [driverId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@index([tenantId, status])
+  @@index([tripId])
+  @@map("incidents")
+}
+
+/// Botón de pánico del chofer (con o sin viaje en curso).
+model PanicEvent {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId             String    @map("tenant_id") @db.Uuid
+  driverId             String    @map("driver_id") @db.Uuid
+  tripId               String?   @map("trip_id") @db.Uuid
+  lat                  Float?
+  lng                  Float?
+  occurredAt           DateTime  @map("occurred_at") @db.Timestamptz(3)
+  acknowledgedAt       DateTime? @map("acknowledged_at") @db.Timestamptz(3)
+  acknowledgedByUserId String?   @map("acknowledged_by_user_id") @db.Uuid
+  clientEventId        String?   @unique @map("client_event_id") @db.Uuid
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  driver Driver @relation(fields: [driverId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  trip   Trip?  @relation(fields: [tripId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@index([tenantId, acknowledgedAt])
+  @@map("panic_events")
 }

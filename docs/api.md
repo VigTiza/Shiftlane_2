@@ -212,6 +212,23 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 | GET | /client-requests/:id | `requests.manage` o `plant.requests` | Detalle con el viaje generado |
 | POST | /client-requests/:id/cancel | `plant.requests` | La planta cancela una solicitud pendiente |
 | POST | /client-requests/:id/approve, /reject | `requests.manage` | Aprobar (un viaje extra crea el viaje) o rechazar con respuesta |
+
+| GET | /driver/trips?date= | chofer | Viajes del día (en curso y siguiente arriba) con paradas, unidad, pasajeros esperados y checklist |
+| GET | /driver/checklist-template | chofer | Puntos del checklist de la unidad |
+| POST | /driver/trips/:id/photos?kind= | chofer | Foto del viaje (checklist, incident, evidence; JPG, PNG o WebP) |
+| POST | /driver/trips/:id/checklist | chofer | Checklist de la unidad (vale para todos los viajes del día de esa unidad) |
+| POST | /driver/trips/:id/start, /stops, /gate, /finish | chofer | Iniciar, llegar a parada, QR de la puerta (`shiftlane-puerta://…`), terminar |
+| POST | /driver/trips/:id/scan | chofer | Escanear credencial QR, gafete o número de empleado; parada por ubicación; sobrecupo |
+| POST | /driver/trips/:id/incidents | chofer | Incidente con tipo, fotos y ubicación |
+| POST | /driver/panic | chofer | Pánico con o sin viaje |
+| GET | /trips/:id | `schedule.read`, `monitoring.view`, `plant.evidence` o `plant.dashboard` | Detalle con evidencia: historial, checklist, abordajes, incidentes, fotos |
+| GET | /trips/:id/photos/:photoId | igual que el detalle | Foto del viaje |
+| POST | /trips/:id/checklist-exception | `dispatch.operate` | Autoriza salir con el checklist sin aprobar |
+| GET/PUT | /checklist-template | `settings.manage` o `schedule.read` / `settings.manage` | Puntos del checklist y fotos obligatorias |
+| GET | /incidents?status= | `alerts.manage`, `monitoring.view` o `dispatch.operate` | Incidentes |
+| POST | /incidents/:id/resolve | `dispatch.operate` o `alerts.manage` | Registra la solución |
+| GET | /panic-events?pending= | `alerts.manage`, `monitoring.view` o `dispatch.operate` | Alertas de pánico |
+| POST | /panic-events/:id/acknowledge | `dispatch.operate` o `alerts.manage` | Marca el pánico como atendido |
 | GET | /trips?from=&to=&plantId=&routeId=&status=&kind= | `schedule.read` o `plant.dashboard` | Viajes de un rango (por omisión, esta semana); la planta ve los de sus transportistas |
 | GET/POST | /holidays | `schedule.read` / `schedule.write` o `settings.manage` | Días festivos del año, generales o por planta |
 | PATCH/DELETE | /holidays/:id | `schedule.write` o `settings.manage` | Cambiar nombre o si hay servicio; eliminar (ajusta los viajes) |
@@ -252,6 +269,17 @@ de salida), pasajeros estimados y ruta de referencia opcional. Al aprobar, el ho
 la hora en planta y el tiempo de recorrido de la ruta (60 minutos sin ruta) o del que indique
 la transportista; si la asignación tiene conflictos que bloquean no se aprueba nada (409),
 salvo con `force`. Cada transportista ve solo las solicitudes dirigidas a ella.
+
+Ciclo de vida del viaje: `scheduled` → `in_progress` (iniciar) → `completed` (terminar);
+`scheduled` → `cancelled`. Checklist, excepción y cancelación solo antes de iniciar; paradas,
+escaneos, QR de puerta y terminar solo en curso; incidentes antes o durante. Para iniciar se
+necesita unidad asignada, checklist del día de esa unidad aprobado (o la excepción del
+despachador), estar dentro de las 2 horas previas a la hora programada y no tener otro viaje
+en curso. Cada acción escribe en `trip_events` (inmutable: ni la aplicación puede editarlo) y
+acepta `clientEventId` (UUID del celular) para que un reenvío no duplique nada; `occurredAt`
+es la hora del celular (si viene adelantada se usa la del servidor). El escaneo responde
+`ok`, `other_route`, `unregistered` (gafete provisional), `already_scanned` o `rejected` para
+el sonido y la vibración del celular.
 
 Credencial QR del pasajero: `SL1.<datos en base64url>.<firma Ed25519>`; los datos llevan
 credencial, pasajero, empresa y un valor aleatorio que cambia al reemitirla.

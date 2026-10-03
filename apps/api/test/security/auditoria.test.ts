@@ -12,6 +12,11 @@ const AUDIT_EXEMPT = [
   'route_stop_times',
   'stops',
   'trips',
+  // Historial inmutable del viaje: trip_events es su propia bitácora.
+  'boardings',
+  'checklist_results',
+  'trip_events',
+  'trip_photos',
 
   'audit_log',
   'passenger_imports',

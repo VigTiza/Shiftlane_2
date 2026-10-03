@@ -51,6 +51,7 @@ import { leadRoutes } from './modules/leads/routes.ts';
 import { passengerRoutes } from './modules/passengers/routes.ts';
 import { requestRoutes } from './modules/requests/routes.ts';
 import { routeRoutes } from './modules/routes/routes.ts';
+import { tripRoutes } from './modules/trips/routes.ts';
 import { scheduleRoutes } from './modules/schedule/routes.ts';
 import { createScheduleService } from './modules/schedule/service.ts';
 import { userRoutes } from './modules/users/routes.ts';
@@ -230,6 +231,7 @@ export async function buildApp({ env, db, mailer, storage, routing }: BuildAppOp
   await app.register(routeRoutes);
   await app.register(scheduleRoutes);
   await app.register(requestRoutes);
+  await app.register(tripRoutes);
 
   return app;
 }

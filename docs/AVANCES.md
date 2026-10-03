@@ -2,8 +2,8 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F05 — Operación de viajes y tiempo real
-- Último prompt completado: F04-P03 Viajes extraordinarios y solicitudes (fase F04 terminada)
-- Siguiente prompt: F05-P01 Ciclo de vida del viaje
+- Último prompt completado: F05-P01 Ciclo de vida del viaje
+- Siguiente prompt: F05-P02 Sincronización sin señal (idempotente)
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -120,7 +120,34 @@
   aprueba o rechaza. Aprobar un viaje extra crea el viaje en la misma transacción: si la
   asignación falla, la solicitud sigue pendiente. Los viajes extra no los toca la generación.
 
+- 2026-10-03 trip_events, boardings, checklist_results y trip_photos son inmutables (trigger
+  app.reject_change y sin UPDATE/DELETE para la app). El checklist vale por unidad y día; si
+  falla, solo sale con la excepción del despachador. La parada de un abordaje la decide la
+  ubicación (parada más cercana a 500 m o menos). Un gafete desconocido queda provisional y el
+  viaje sigue. La planta ve la evidencia de sus viajes (historial, abordajes, incidentes y
+  fotos), no el checklist ni el pánico.
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F05-P01 Ciclo de vida del viaje
+- Hecho: migración trip_execution (trip_events, checklist_templates, checklist_results,
+  trip_photos, boardings, incidents, panic_events; tiempos reales, llegada por puerta y
+  excepción de checklist en trips; RLS por transportista y evidencia para la planta).
+  Máquina de estados pura (trips/lifecycle.ts). API del chofer: viajes del día, plantilla,
+  fotos, checklist, iniciar, paradas, escaneo (QR, gafete o número de empleado, parada por
+  ubicación, sobrecupo, provisionales), incidentes, pánico, QR de puerta y terminar, todo
+  idempotente con el UUID del celular. Panel: detalle con evidencia, fotos, excepción de
+  checklist, plantilla configurable, incidentes y pánico.
+- Archivos principales: apps/api/src/modules/trips/*, prisma/migrations/*_trip_execution.
+- Pruebas agregadas / resultado: 6 unitarias de la máquina de estados (tabla completa) y 11
+  de integración (ciclo completo con evidencia para panel y planta, acciones fuera de orden,
+  checklist fallido con excepción, ventana de inicio, un viaje a la vez, sin unidad,
+  aislamiento entre choferes y empresas, reenvíos sin duplicar, pánico, QR de puerta,
+  incidentes, historial inmutable, checklist configurable con fotos). 291 pruebas de la API
+  en verde.
+- Problemas encontrados y cómo se resolvieron: ninguno relevante.
+- Pendiente para después: alertas de checklist fallido, pánico e incidentes (F06-P01);
+  revisión del celular antes del turno (F06-P02 / F07-P03); eventos en tiempo real (F05-P04).
+
 ### 2026-10-03 — F04-P03 Viajes extraordinarios y solicitudes
 - Hecho: migración client_requests (RLS: la transportista ve las suyas, la planta las que hizo
   con acuerdo vigente; sin DELETE; auditoría) y campos de viaje extra en trips (motivo,
