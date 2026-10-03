@@ -2,6 +2,13 @@
     <!-- API de Shiftlane y lector de QR (alta del celular, gafetes y puerta de planta). -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Revisión del celular: ubicación «todo el tiempo» durante los viajes y fuera del
+         ahorro de batería para que el sistema no cierre la app. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <application
         android:label="shiftlane_driver"
         android:name="${applicationName}"

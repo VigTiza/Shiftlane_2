@@ -2,8 +2,8 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F07 — App del chofer (Flutter)
-- Último prompt completado: F07-P02 Acceso con QR y PIN
-- Siguiente prompt: F07-P03 Revisión del celular antes del turno
+- Último prompt completado: F07-P03 Revisión del celular antes del turno
+- Siguiente prompt: F07-P04 Pantalla principal, checklist y viaje
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -172,7 +172,31 @@
   la sesión se renueva al abrir (sin señal sigue adentro). La cámara está detrás de
   qrScannerProvider para poder probar sin celular.
 
+- 2026-10-03 Revisión del celular: se evalúa en el celular con las mismas reglas del servidor
+  (funciona sin señal) y se reporta a /driver/health, que agrega la hora desfasada y la
+  versión mínima. Las «imágenes por marca» son ilustraciones dibujadas con widgets (ruta del
+  menú de ajustes con los colores de cada marca), sin capturas de pantalla. Al entrar se
+  revisa una vez por sesión; si todo está en verde sigue sola al inicio. La excepción del
+  despachador es la misma autorización de salida del viaje (checklist-exception).
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F07-P03 Revisión del celular antes del turno
+- Hecho: lecturas del celular (ubicación y permiso «siempre», ahorro de batería, batería y
+  carga, datos, cámara, versión) con permission_handler, battery_plus, connectivity_plus,
+  device_info_plus y package_info_plus; evaluación local; reporte al servidor con unión de sus
+  avisos; pantalla con estado por punto, guía por marca (Samsung, Motorola, Xiaomi, genérico)
+  con ilustración y botón que pide el permiso o abre el ajuste exacto (app_settings);
+  bloqueo de viajes hasta estar en verde o con autorización del despachador; aviso en el
+  inicio; permisos de Android.
+- Archivos principales: apps/driver/lib/{domain,data,application}/device_check/*,
+  lib/presentation/screens/device_check/device_check_screen.dart,
+  lib/presentation/widgets/settings_path_illustration.dart.
+- Pruebas agregadas / resultado: 13 nuevas con permisos simulados (reglas, servidor, marcas,
+  pantalla en verde, arreglo guiado en Samsung, avisos del servidor, sin señal); 38 en total.
+- Problemas encontrados y cómo se resolvieron: botones fuera de la pantalla de prueba (se
+  agranda la pantalla en esa prueba).
+- Pendiente para después: probar en celulares reales de cada marca (con el APK de F07-P07).
+
 ### 2026-10-03 — F07-P02 Acceso con QR y PIN
 - Hecho: vinculación por QR (o código escrito) con creación del PIN al primer uso; elección
   de chofer en celular compartido; PIN con teclado grande, errores del servidor en español,

@@ -3,7 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shiftlane_driver/app.dart';
+import 'package:dio/dio.dart';
 import 'package:shiftlane_driver/application/auth/auth_providers.dart';
+import 'package:shiftlane_driver/application/device_check/device_check_controller.dart';
+import 'package:shiftlane_driver/core/network/api_client.dart';
+import 'package:shiftlane_driver/data/device_check/device_health_api.dart';
+import 'package:shiftlane_driver/domain/device_check/device_check.dart';
 import 'package:shiftlane_driver/application/providers.dart';
 import 'package:shiftlane_driver/core/config/environment.dart';
 import 'package:shiftlane_driver/core/errors/app_failure.dart';
@@ -135,6 +140,87 @@ class FakeAuthRepository implements AuthRepository {
       calls.add('logout:$accessToken');
 }
 
+/// Lecturas simuladas del celular (por omisión, todo en verde).
+class FakeDeviceProbe implements DeviceProbe {
+  FakeDeviceProbe([DeviceReadings? readings])
+    : readings = readings ?? healthyReadings();
+
+  DeviceReadings readings;
+
+  @override
+  Future<DeviceReadings> read() async => readings;
+}
+
+DeviceReadings healthyReadings({
+  bool locationServiceEnabled = true,
+  LocationPermission locationPermission = LocationPermission.always,
+  bool batteryOptimizationIgnored = true,
+  int batteryLevel = 80,
+  bool charging = false,
+  NetworkType network = NetworkType.cellular,
+  bool cameraGranted = true,
+  String manufacturer = 'motorola',
+}) => DeviceReadings(
+  locationServiceEnabled: locationServiceEnabled,
+  locationPermission: locationPermission,
+  batteryOptimizationIgnored: batteryOptimizationIgnored,
+  batteryLevel: batteryLevel,
+  charging: charging,
+  network: network,
+  cameraGranted: cameraGranted,
+  appVersion: '0.1.0',
+  manufacturer: manufacturer,
+  model: 'Modelo de prueba',
+  osVersion: 'Android 15',
+);
+
+/// Arreglos simulados: registra la acción y la aplica a las lecturas.
+class FakeDeviceFixer implements DeviceFixer {
+  FakeDeviceFixer(this.probe);
+
+  final FakeDeviceProbe probe;
+  final List<FixAction> actions = [];
+
+  @override
+  Future<void> fix(FixAction action) async {
+    actions.add(action);
+    final r = probe.readings;
+    probe.readings = healthyReadings(
+      manufacturer: r.manufacturer,
+      locationServiceEnabled: r.locationServiceEnabled,
+      locationPermission: action == FixAction.requestLocationAlways
+          ? LocationPermission.always
+          : r.locationPermission,
+      batteryOptimizationIgnored:
+          r.batteryOptimizationIgnored ||
+          action == FixAction.disableBatteryOptimization,
+      batteryLevel: r.batteryLevel,
+      charging: r.charging,
+      network: r.network,
+      cameraGranted: r.cameraGranted || action == FixAction.requestCamera,
+    );
+  }
+}
+
+/// Servidor de salud simulado: responde los problemas indicados o falla sin señal.
+class FakeDeviceHealthApi extends DeviceHealthApi {
+  FakeDeviceHealthApi() : super(ApiClient(Dio()));
+
+  List<ServerIssue> issues = [];
+  bool offline = false;
+  int sent = 0;
+
+  @override
+  Future<List<ServerIssue>> send(
+    DeviceReadings readings, {
+    DateTime? now,
+  }) async {
+    if (offline) throw const NetworkFailure();
+    sent += 1;
+    return issues;
+  }
+}
+
 /// Lector de QR de prueba: un botón que «escanea» el código indicado.
 Widget fakeScanner(BuildContext context, ValueChanged<String> onCode) => Center(
   child: ElevatedButton(
@@ -149,7 +235,11 @@ Future<ProviderContainer> pumpApp(
   required InMemoryCredentialStore store,
   required FakeAuthRepository repository,
   String environment = 'dev',
+  FakeDeviceProbe? probe,
+  FakeDeviceFixer? fixer,
+  FakeDeviceHealthApi? healthApi,
 }) async {
+  final deviceProbe = probe ?? FakeDeviceProbe();
   final db = AppDatabase(NativeDatabase.memory());
   addTearDown(db.close);
   final container = ProviderContainer(
@@ -161,6 +251,13 @@ Future<ProviderContainer> pumpApp(
       credentialStoreProvider.overrideWithValue(store),
       authRepositoryProvider.overrideWithValue(repository),
       qrScannerProvider.overrideWithValue(fakeScanner),
+      deviceProbeProvider.overrideWithValue(deviceProbe),
+      deviceFixerProvider.overrideWithValue(
+        fixer ?? FakeDeviceFixer(deviceProbe),
+      ),
+      deviceHealthApiProvider.overrideWithValue(
+        healthApi ?? FakeDeviceHealthApi(),
+      ),
     ],
   );
   addTearDown(container.dispose);

@@ -4,21 +4,30 @@ import 'package:go_router/go_router.dart';
 
 import '../../application/auth/auth_controller.dart';
 import '../../application/auth/auth_providers.dart';
+import '../../application/device_check/device_check_controller.dart';
 import '../../domain/auth/auth_models.dart';
 import '../../presentation/screens/auth/auth_screens.dart';
+import '../../presentation/screens/device_check/device_check_screen.dart';
 import '../../presentation/screens/home_screen.dart';
 import 'app_routes.dart';
 
 export 'app_routes.dart';
 
-/// A dónde debe ir el chofer según el estado del acceso (null: se queda).
-String? redirectFor(AuthState auth, String location) {
+/// A dónde debe ir el chofer según el estado del acceso (null: se queda). Al entrar, primero
+/// se revisa el celular.
+String? redirectFor(
+  AuthState auth,
+  String location, {
+  bool deviceChecked = true,
+}) {
   final inEnroll = location.startsWith(AppRoutes.enroll);
   final inLogin = location.startsWith(AppRoutes.selectDriver);
   return switch (auth) {
     AuthLoading() => location == AppRoutes.loading ? null : AppRoutes.loading,
     AuthNeedsEnrollment() => inEnroll ? null : AppRoutes.enroll,
     AuthNeedsDriver() => inEnroll || inLogin ? null : AppRoutes.selectDriver,
+    AuthSignedIn() when !deviceChecked =>
+      location == AppRoutes.deviceCheck ? null : AppRoutes.deviceCheck,
     AuthSignedIn() =>
       inEnroll || inLogin || location == AppRoutes.loading
           ? AppRoutes.home
@@ -29,13 +38,23 @@ String? redirectFor(AuthState auth, String location) {
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ValueNotifier<AuthState>(ref.read(authControllerProvider));
   ref.listen(authControllerProvider, (_, next) => auth.value = next);
+  final checked = ValueNotifier<bool>(
+    ref.read(deviceCheckProvider).acknowledged,
+  );
+  ref.listen(
+    deviceCheckProvider,
+    (_, next) => checked.value = next.acknowledged,
+  );
   final controller = ref.read(authControllerProvider.notifier);
 
   final router = GoRouter(
     initialLocation: AppRoutes.loading,
-    refreshListenable: auth,
-    redirect: (context, state) =>
-        redirectFor(auth.value, state.matchedLocation),
+    refreshListenable: Listenable.merge([auth, checked]),
+    redirect: (context, state) => redirectFor(
+      auth.value,
+      state.matchedLocation,
+      deviceChecked: checked.value,
+    ),
     routes: [
       GoRoute(
         path: AppRoutes.loading,
@@ -44,6 +63,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.home,
         builder: (context, state) => const HomeScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.deviceCheck,
+        builder: (context, state) => const DeviceCheckScreen(),
       ),
       GoRoute(
         path: AppRoutes.enroll,
@@ -90,6 +113,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   ref.onDispose(() {
     router.dispose();
     auth.dispose();
+    checked.dispose();
   });
   return router;
 });

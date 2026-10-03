@@ -6,4 +6,5 @@ abstract final class AppRoutes {
   static const selectDriver = '/entrar';
   static const pin = '/entrar/pin';
   static const newPin = '/entrar/nuevo-pin';
+  static const deviceCheck = '/revision';
 }
