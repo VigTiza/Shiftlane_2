@@ -7,6 +7,12 @@ import { authOf, dbContextOf, requirePermission, tenantIdOf } from '../../plugin
 import {
   createRouteBody,
   createShiftBody,
+  createTemporaryChangeBody,
+  routePassengersBody,
+  routePassengersResponse,
+  simulateBody,
+  simulationResponse,
+  temporaryChangeSummary,
   distanceToPathQuery,
   distanceToPathResponse,
   nearestStopQuery,
@@ -27,7 +33,9 @@ import {
   versionDetail,
   versionInput,
 } from './schemas.ts';
+import { createRoutePassengersService } from './route-passengers.ts';
 import { createRoutesService } from './service.ts';
+import { createTemporaryChangesService } from './temporary-changes.ts';
 
 const TAGS = ['Rutas'];
 
@@ -36,6 +44,11 @@ export const routeRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
     routing: app.routingProvider,
     averageSpeedKmh: app.config.ROUTING_AVERAGE_SPEED_KMH,
   });
+  const temporaryChanges = createTemporaryChangesService({
+    routes: service,
+    routing: app.routingProvider,
+  });
+  const routePassengers = createRoutePassengersService({ routes: service });
   const canRead = requirePermission(app, 'routes.read');
   const canWrite = requirePermission(app, 'routes.write');
   const canReadShifts = requirePermission(app, 'routes.read', 'schedule.read', 'settings.manage');
@@ -279,6 +292,99 @@ export const routeRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
       );
       return reply.status(204).send(null);
     },
+  );
+
+  app.post(
+    '/routes/:id/temporary-changes',
+    {
+      onRequest: canWrite,
+      schema: {
+        tags: TAGS,
+        summary:
+          'Cambio temporal entre dos fechas (otras paradas u horarios, o servicio suspendido)',
+        params: idParams,
+        body: createTemporaryChangeBody,
+        response: { 201: temporaryChangeSummary },
+      },
+    },
+    async (request, reply) => {
+      const change = await withDbContext(app.db.app, dbContextOf(request), (tx) =>
+        temporaryChanges.create(tx, request.params.id, authOf(request, 'user').sub, request.body),
+      );
+      return reply.status(201).send(change);
+    },
+  );
+
+  app.post(
+    '/temporary-changes/:id/cancel',
+    {
+      onRequest: canWrite,
+      schema: {
+        tags: TAGS,
+        summary: 'Cancela un cambio temporal (vuelve la versión normal)',
+        params: idParams,
+        response: { 204: z.null() },
+      },
+    },
+    async (request, reply) => {
+      await withDbContext(app.db.app, dbContextOf(request), (tx) =>
+        temporaryChanges.cancel(tx, request.params.id),
+      );
+      return reply.status(204).send(null);
+    },
+  );
+
+  app.post(
+    '/routes/:id/simulate',
+    {
+      onRequest: canRead,
+      schema: {
+        tags: TAGS,
+        summary: 'Simula un cambio de ruta sin guardar: paradas, tiempos y pasajeros afectados',
+        params: idParams,
+        body: simulateBody,
+        response: { 200: simulationResponse },
+      },
+    },
+    (request) =>
+      withDbContext(app.db.app, dbContextOf(request), (tx) =>
+        temporaryChanges.simulate(tx, request.params.id, request.body),
+      ),
+  );
+
+  app.get(
+    '/routes/:id/passengers',
+    {
+      onRequest: canRead,
+      schema: {
+        tags: TAGS,
+        summary: 'Pasajeros asignados a cada parada',
+        params: idParams,
+        response: { 200: routePassengersResponse },
+      },
+    },
+    (request) =>
+      withDbContext(app.db.app, dbContextOf(request), (tx) =>
+        routePassengers.list(tx, request.params.id),
+      ),
+  );
+
+  app.put(
+    '/routes/:id/passengers',
+    {
+      onRequest: canWrite,
+      schema: {
+        tags: TAGS,
+        summary: 'Reemplaza la asignación de pasajeros a paradas',
+        params: idParams,
+        body: routePassengersBody,
+        response: { 200: routePassengersResponse },
+      },
+    },
+    (request) =>
+      withDbContext(app.db.app, dbContextOf(request), (tx) =>
+        routePassengers.replace(tx, request.params.id, request.body.assignments),
+      ),
   );
 
   app.post(

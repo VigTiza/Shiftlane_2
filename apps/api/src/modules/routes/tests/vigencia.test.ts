@@ -29,13 +29,32 @@ describe('versión vigente de una ruta', () => {
     expect(effectiveVersion(versions, changes, '2026-10-19')).toEqual({
       versionId: 'v1',
       temporaryChangeId: null,
+      suspended: false,
     });
     expect(effectiveVersion(versions, changes, '2026-10-20')).toEqual({
       versionId: 'temp',
       temporaryChangeId: 'c1',
+      suspended: false,
     });
     expect(effectiveVersion(versions, changes, '2026-10-22')?.versionId).toBe('temp');
     expect(effectiveVersion(versions, changes, '2026-10-23')?.versionId).toBe('v1');
+  });
+
+  it('un cambio temporal puede suspender el servicio y luego vuelve solo', () => {
+    const suspension: TemporaryChangeForDate[] = [
+      { id: 's1', versionId: null, startsOn: '2026-12-24', endsOn: '2026-12-25', cancelled: false },
+    ];
+    expect(effectiveVersion(versions, suspension, '2026-12-24')).toEqual({
+      versionId: null,
+      temporaryChangeId: 's1',
+      suspended: true,
+    });
+    expect(effectiveVersion(versions, suspension, '2026-12-26')?.suspended).toBe(false);
+  });
+
+  it('un cambio temporal no aplica antes de que exista la ruta', () => {
+    const early = [{ ...changes[0]!, startsOn: '2026-09-01', endsOn: '2026-09-05' }];
+    expect(effectiveVersion(versions, early, '2026-09-02')).toBeNull();
   });
 
   it('un cambio temporal cancelado no aplica', () => {

@@ -192,6 +192,10 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 | GET/DELETE | /routes/:id/versions/:versionId | `routes.read` / `routes.write` | Detalle (paradas, horarios, trazo GeoJSON); eliminar solo futuras |
 | POST | /routes/:id/versions/:versionId/restore | `routes.write` | Restaurar una versión anterior como nueva |
 
+| POST | /routes/:id/temporary-changes | `routes.write` | Cambio temporal: otras paradas u horarios, o servicio suspendido, entre dos fechas |
+| POST | /temporary-changes/:id/cancel | `routes.write` | Cancelar un cambio que no ha terminado |
+| POST | /routes/:id/simulate | `routes.read` | Simular un cambio (temporal o versión) sin guardar: paradas, tiempos y pasajeros afectados |
+| GET/PUT | /routes/:id/passengers | `routes.read` / `routes.write` | Pasajeros asignados a cada parada (por stop_key) |
 | POST | /routing/preview | `routes.read` | Distancia, tiempo y trazo por calles entre puntos (OSRM o línea recta) |
 | GET | /route-versions/:id/nearest-stop?lat=&lng=&maxMeters= | `routes.read` | Parada más cercana dentro del radio |
 | GET | /route-versions/:id/distance-to-path?lat=&lng=&thresholdMeters= | `routes.read` | Distancia al trazado y si es desvío |

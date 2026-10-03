@@ -62,6 +62,7 @@ model Tenant {
   stops               Stop[]
   routeStopTimes      RouteStopTime[]
   temporaryChanges    TemporaryChange[]
+  routePassengers     RoutePassenger[]
 
   @@map("tenants")
 }
@@ -506,11 +507,12 @@ model Passenger {
   updatedAt      DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt      DateTime?       @map("deleted_at") @db.Timestamptz(3)
 
-  clientOrg      ClientOrg             @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
-  plant          Plant                 @relation(fields: [plantId, clientOrgId], references: [id, clientOrgId], onDelete: Restrict)
-  sessions       Session[]
-  credentials    PassengerCredential[]
-  resolvedBadges ProvisionalBadge[]
+  clientOrg        ClientOrg             @relation(fields: [clientOrgId], references: [id], onDelete: Restrict)
+  plant            Plant                 @relation(fields: [plantId, clientOrgId], references: [id, clientOrgId], onDelete: Restrict)
+  sessions         Session[]
+  credentials      PassengerCredential[]
+  resolvedBadges   ProvisionalBadge[]
+  routeAssignments RoutePassenger[]
 
   @@unique([clientOrgId, employeeNumber])
   @@index([plantId])
@@ -1008,6 +1010,7 @@ model Route {
   versions         RouteVersion[]
   temporaryChanges TemporaryChange[]
   rates            Rate[]
+  passengers       RoutePassenger[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -1098,7 +1101,9 @@ model TemporaryChange {
   id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId        String    @map("tenant_id") @db.Uuid
   routeId         String    @map("route_id") @db.Uuid
-  routeVersionId  String    @map("route_version_id") @db.Uuid
+  /// Versión alterna (paradas u horarios distintos); nula si el cambio suspende el servicio.
+  routeVersionId  String?   @map("route_version_id") @db.Uuid
+  suspendsService Boolean   @default(false) @map("suspends_service")
   startsOn        DateTime  @map("starts_on") @db.Date
   endsOn          DateTime  @map("ends_on") @db.Date
   reason          String
@@ -1107,9 +1112,9 @@ model TemporaryChange {
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  route        Route        @relation(fields: [routeId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  routeVersion RouteVersion @relation(fields: [routeVersionId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  route        Route         @relation(fields: [routeId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  routeVersion RouteVersion? @relation(fields: [routeVersionId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@index([routeId, startsOn])
   @@map("temporary_changes")
@@ -1122,4 +1127,24 @@ model RoutingCache {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@map("routing_cache")
+}
+
+/// Pasajero asignado a una parada de la ruta (por stop_key, estable entre versiones).
+model RoutePassenger {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  routeId     String    @map("route_id") @db.Uuid
+  passengerId String    @map("passenger_id") @db.Uuid
+  stopKey     String    @map("stop_key") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  route     Route     @relation(fields: [routeId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  passenger Passenger @relation(fields: [passengerId], references: [id], onDelete: Cascade)
+
+  @@unique([routeId, passengerId])
+  @@index([passengerId])
+  @@map("route_passengers")
 }

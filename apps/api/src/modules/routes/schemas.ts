@@ -52,6 +52,8 @@ export const stopTimeInput = z.object({
 });
 
 export const stopInput = z.object({
+  /** Identidad de una parada existente (para conservarla entre versiones). */
+  stopKey: z.uuid().optional(),
   name: z.string().trim().min(2, 'Escribe el nombre de la parada.').max(120),
   address: optionalText(300),
   location: latLng,
@@ -60,34 +62,43 @@ export const stopInput = z.object({
   times: z.array(stopTimeInput).min(1, 'Cada parada necesita su horario.').max(8),
 });
 
-export const versionInput = z
-  .object({
-    validFrom: dateString,
-    /** Trazo como [lng, lat] (orden GeoJSON). Si no se envía, se une la secuencia de paradas. */
-    path: z
-      .array(z.tuple([z.number(), z.number()]))
-      .min(2)
-      .max(5000)
-      .optional(),
-    stops: z.array(stopInput).min(1, 'La ruta necesita al menos una parada.').max(80),
-    notes: optionalText(1000),
-  })
-  .superRefine((version, ctx) => {
-    // Los horarios generales deben ir en orden a lo largo de la ruta.
-    let previous: string | null = null;
-    version.stops.forEach((stop, index) => {
-      const general = stop.times.find((t) => t.weekdays.length === 0)?.time;
-      if (!general) return;
-      if (previous && general < previous) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['stops', index, 'times'],
-          message: `La parada ${index + 1} tiene un horario anterior a la parada previa.`,
-        });
-      }
-      previous = general;
-    });
+const versionFields = {
+  /** Trazo como [lng, lat] (orden GeoJSON). Si no se envía, se calcula por calles. */
+  path: z
+    .array(z.tuple([z.number(), z.number()]))
+    .min(2)
+    .max(5000)
+    .optional(),
+  stops: z.array(stopInput).min(1, 'La ruta necesita al menos una parada.').max(80),
+  notes: optionalText(1000),
+};
+
+function checkStopOrder(
+  version: { stops: { times: { weekdays: number[]; time: string }[] }[] },
+  ctx: z.RefinementCtx,
+) {
+  // Los horarios generales deben ir en orden a lo largo de la ruta.
+  let previous: string | null = null;
+  version.stops.forEach((stop, index) => {
+    const general = stop.times.find((t) => t.weekdays.length === 0)?.time;
+    if (!general) return;
+    if (previous && general < previous) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['stops', index, 'times'],
+        message: `La parada ${index + 1} tiene un horario anterior a la parada previa.`,
+      });
+    }
+    previous = general;
   });
+}
+
+/** Paradas, horarios y trazo de una versión sin fecha (cambios temporales y simulación). */
+export const versionContent = z.object(versionFields).superRefine(checkStopOrder);
+
+export const versionInput = z
+  .object({ validFrom: dateString, ...versionFields })
+  .superRefine(checkStopOrder);
 
 export const createRouteBody = z.object({
   plantId: z.uuid(),
@@ -174,7 +185,8 @@ export const routeDetail = routeSummary.extend({
   temporaryChanges: z.array(
     z.object({
       id: z.uuid(),
-      versionId: z.uuid(),
+      versionId: z.uuid().nullable(),
+      suspendsService: z.boolean(),
       startsOn: z.string(),
       endsOn: z.string(),
       reason: z.string(),
@@ -216,8 +228,89 @@ export const previewResponse = z.object({
   source: z.enum(['osrm', 'straight_line']),
 });
 
+export const temporaryChangeSummary = z.object({
+  id: z.uuid(),
+  versionId: z.uuid().nullable(),
+  suspendsService: z.boolean(),
+  startsOn: z.string(),
+  endsOn: z.string(),
+  reason: z.string(),
+  cancelled: z.boolean(),
+});
+
+export const createTemporaryChangeBody = z
+  .object({
+    startsOn: dateString,
+    endsOn: dateString,
+    reason: z.string().trim().min(5, 'Explica el motivo del cambio.').max(300),
+    suspendService: z.boolean().default(false),
+    version: versionContent.optional(),
+  })
+  .refine((body) => body.endsOn >= body.startsOn, {
+    message: 'La fecha de fin no puede ser anterior a la de inicio.',
+    path: ['endsOn'],
+  });
+
+export const simulateBody = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('temporary'),
+    startsOn: dateString,
+    endsOn: dateString,
+    suspendService: z.boolean().default(false),
+    version: versionContent.optional(),
+  }),
+  z.object({ kind: z.literal('version'), validFrom: dateString, version: versionContent }),
+]);
+
+const stopRef = z.object({ stopKey: z.uuid(), name: z.string() });
+
+export const simulationResponse = z.object({
+  period: z.object({
+    from: z.string(),
+    to: z.string().nullable(),
+    days: z.number().int().nullable(),
+  }),
+  suspended: z.boolean(),
+  stops: z.object({
+    added: z.array(z.object({ name: z.string() })),
+    removed: z.array(stopRef),
+    moved: z.array(stopRef.extend({ distanceMeters: z.number() })),
+    retimed: z.array(stopRef.extend({ from: z.string().nullable(), to: z.string().nullable() })),
+  }),
+  distanceKm: z.object({ from: z.number().nullable(), to: z.number().nullable() }),
+  durationMinutes: z.object({ from: z.number().nullable(), to: z.number().nullable() }),
+  passengers: z.array(
+    z.object({
+      id: z.uuid(),
+      fullName: z.string(),
+      employeeNumber: z.string(),
+      stopName: z.string().nullable(),
+      reason: z.enum(['service_suspended', 'stop_removed', 'stop_moved', 'time_changed']),
+    }),
+  ),
+  trips: z.array(z.object({ id: z.uuid(), date: z.string(), driverName: z.string().nullable() })),
+  drivers: z.array(z.object({ id: z.uuid(), fullName: z.string() })),
+});
+
+export const routePassengersBody = z.object({
+  assignments: z.array(z.object({ passengerId: z.uuid(), stopKey: z.uuid() })).max(500),
+});
+
+export const routePassengersResponse = z.array(
+  z.object({
+    passengerId: z.uuid(),
+    fullName: z.string(),
+    employeeNumber: z.string(),
+    status: z.enum(['active', 'inactive']),
+    stopKey: z.uuid(),
+    stopName: z.string().nullable(),
+  }),
+);
+
 export const effectiveResponse = z.object({
   date: z.string(),
   temporaryChangeId: z.uuid().nullable(),
+  /** Un cambio temporal suspende el servicio ese día. */
+  suspended: z.boolean(),
   version: versionDetail.nullable(),
 });

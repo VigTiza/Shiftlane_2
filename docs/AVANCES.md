@@ -1,9 +1,9 @@
 # AVANCES — Shiftlane
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
-- Fase actual: F03 — Rutas y paradas
-- Último prompt completado: F03-P02
-- Siguiente prompt: F03-P03 Cambios temporales y simulación
+- Fase actual: F04 — Programación de servicios
+- Último prompt completado: F03-P03 (fase F03 terminada)
+- Siguiente prompt: F04-P01 Generador de viajes
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -14,7 +14,12 @@
     `--wait`) y correr las pruebas con Testcontainers / contra el compose, incluida la de S3
     (S3_TEST_ENDPOINT=http://localhost:9000).
   - GitHub: origin = https://github.com/VigTiza/Shiftlane_2 (público), con acceso por el
-    administrador de credenciales de Git. Revisar el resultado del CI tras cada push.
+    administrador de credenciales de Git. El CI pasó completo (incluye Testcontainers y
+    Flutter en GitHub). Revisar el resultado tras cada push.
+  - F04: la simulación de cambios de ruta debe agregar viajes y choferes afectados cuando
+    existan los viajes programados (hoy devuelve listas vacías).
+  - La API de desarrollo se puede levantar con `node src/server.ts` en apps/api (puerto
+    3000, documentación en http://localhost:3000/docs).
 
 ## DECISIONES IMPORTANTES
 - 2026-10-02 Los .docx se convierten con pandoc 3.12 y un script propio
@@ -84,8 +89,27 @@
 - 2026-10-03 Rutas por calles con proveedor configurable (OSRM o línea recta), caché en la
   base y respaldo automático; funciones geográficas en packages/shared (verificadas contra
   PostGIS) y equivalentes PostGIS en el servidor.
+- 2026-10-03 Cambios temporales sin traslapes (máx. 180 días), con versión alterna o
+  suspensión del servicio; solo aplican si la ruta ya existía. Pasajeros asignados a paradas
+  por stop_key (route_passengers). La simulación no guarda nada.
 
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F03-P03 Cambios temporales y simulación
+- Hecho: vigencia con suspensión (versionId nulo); cambios temporales con versión alterna o
+  servicio suspendido, validación de fechas, traslapes y duración, cancelación; asignación de
+  pasajeros a paradas (route_passengers, RLS y auditoría); simulación sin guardar de cambios
+  temporales o versiones nuevas: periodo afectado, paradas agregadas/quitadas/movidas/con
+  otro horario, distancia y tiempo antes y después, pasajeros afectados con el motivo.
+- Archivos principales: apps/api/src/modules/routes/{temporary-changes,route-passengers,
+  versioning}.ts, prisma/migrations/*_temporary_changes.
+- Pruebas agregadas / resultado: 2 unitarias nuevas de vigencia y 8 de integración
+  (reversión automática, suspensión, validaciones, cancelación, pasajeros por parada,
+  simulación con motivos y sin guardar, suspensión simulada, periodo de una versión). 222
+  pruebas de la API en verde.
+- Problemas encontrados y cómo se resolvieron: reemplazos de texto que fallaron por el
+  formato de Prettier (se hicieron por posición).
+- Pendiente para después: viajes y choferes afectados en la simulación (F04).
+
 ### 2026-10-03 — F03-P02 Cálculos geográficos
 - Hecho: packages/shared/src/geo.ts (haversine, longitud, distancia punto-segmento y al
   trazado, parada más cercana con radio, tiempo estimado). src/lib/routing.ts: OSRM con

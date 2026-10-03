@@ -482,6 +482,7 @@ export function createRoutesService(deps: { routing: RoutingProvider; averageSpe
         temporaryChanges: data.changes.map((c) => ({
           id: c.id,
           versionId: c.routeVersionId,
+          suspendsService: c.suspendsService,
           startsOn: fromDbDate(c.startsOn)!,
           endsOn: fromDbDate(c.endsOn)!,
           reason: c.reason,
@@ -653,7 +654,8 @@ export function createRoutesService(deps: { routing: RoutingProvider; averageSpe
       return {
         date: day,
         temporaryChangeId: effective?.temporaryChangeId ?? null,
-        version: effective
+        suspended: effective?.suspended ?? false,
+        version: effective?.versionId
           ? await versionDetail(tx, effective.versionId, current?.versionId ?? null)
           : null,
       };
