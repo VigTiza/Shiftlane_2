@@ -60,10 +60,25 @@ const envSchema = z
     S3_FORCE_PATH_STYLE: booleanFromEnv.default(false),
     /** Llave privada Ed25519 (PKCS8 DER en base64) para firmar las credenciales QR de pasajeros. */
     CREDENTIAL_SIGNING_KEY: z.string().min(40),
+    /** Rutas por calles: OSRM (propio o compatible) o línea recta como respaldo. */
+    ROUTING_PROVIDER: z.enum(['osrm', 'straight_line']).default('straight_line'),
+    ROUTING_URL: z.url().optional(),
+    ROUTING_TIMEOUT_MS: z.coerce.number().int().positive().default(4000),
+    /** Velocidad promedio urbana para estimar tiempos sin servicio de rutas (km/h). */
+    ROUTING_AVERAGE_SPEED_KMH: z.coerce.number().positive().default(28),
+    /** Distancia al trazado a partir de la cual se considera desvío (metros). */
+    OFF_ROUTE_THRESHOLD_METERS: z.coerce.number().int().positive().default(150),
     /** Zona horaria por omisión para fechas de negocio (vencimientos, días de servicio). */
     DEFAULT_TIME_ZONE: z.string().default('America/Ciudad_Juarez'),
   })
   .superRefine((env, ctx) => {
+    if (env.ROUTING_PROVIDER === 'osrm' && !env.ROUTING_URL) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ROUTING_URL'],
+        message: 'Es obligatoria cuando ROUTING_PROVIDER=osrm.',
+      });
+    }
     if (env.STORAGE_DRIVER !== 's3') return;
     for (const key of ['S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'] as const) {
       if (!env[key]) {

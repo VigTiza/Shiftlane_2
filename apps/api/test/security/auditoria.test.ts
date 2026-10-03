@@ -16,6 +16,7 @@ const AUDIT_EXEMPT = [
   'passenger_imports',
   'password_reset_tokens',
   'roles',
+  'routing_cache',
   'sessions',
 ];
 

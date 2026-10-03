@@ -1032,6 +1032,8 @@ model RouteVersion {
   path            Unsupported("geography(LineString, 4326)")?
   distanceKm      Decimal?                                    @map("distance_km") @db.Decimal(8, 2)
   durationMinutes Int?                                        @map("duration_minutes")
+  /// Origen del cálculo de distancia y tiempo: osrm, straight_line o manual (trazo dibujado).
+  routingSource   String?                                     @map("routing_source")
   notes           String?
   /// Versión de la que se copió (al restaurar o derivar).
   basedOnId       String?                                     @map("based_on_id") @db.Uuid
@@ -1111,4 +1113,13 @@ model TemporaryChange {
 
   @@index([routeId, startsOn])
   @@map("temporary_changes")
+}
+
+/// Caché de cálculos de rutas por calles (solo la usa el sistema).
+model RoutingCache {
+  key       String   @id
+  result    Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("routing_cache")
 }

@@ -1,9 +1,11 @@
-import { todayIn } from '@shiftlane/shared';
+import { estimateMinutes, todayIn } from '@shiftlane/shared';
+import type { LatLng } from '@shiftlane/shared';
 
 import type { DbTransaction } from '../../lib/db.ts';
 import { BadRequestError, ConflictError, NotFoundError } from '../../lib/errors.ts';
 import { fromDbDate, toDbDate } from '../../lib/http-schemas.ts';
 import { isUniqueViolation } from '../../lib/prisma-errors.ts';
+import type { RoutingProvider } from '../../lib/routing.ts';
 import type { Route, RouteVersion, Shift } from '../../generated/prisma/client.ts';
 import { effectiveVersion } from './versioning.ts';
 
@@ -48,7 +50,7 @@ function mapShift(shift: Shift) {
  * Rutas con versiones vigentes por fecha. Las versiones que ya empezaron no se modifican:
  * un cambio crea una versión nueva, así el historial queda intacto y se puede restaurar.
  */
-export function createRoutesService() {
+export function createRoutesService(deps: { routing: RoutingProvider; averageSpeedKmh?: number }) {
   async function plantToday(tx: DbTransaction, plantId: string): Promise<string> {
     const plant = await tx.plant.findFirst({ where: { id: plantId } });
     return todayIn(plant?.timezone ?? 'America/Ciudad_Juarez');
@@ -99,6 +101,7 @@ export function createRoutesService() {
       durationMinutes: version.durationMinutes,
       stopsCount: counts.get(version.id) ?? 0,
       basedOnId: version.basedOnId,
+      routingSource: version.routingSource,
       notes: version.notes,
       createdAt: version.createdAt,
       current: version.id === currentId,
@@ -141,6 +144,64 @@ export function createRoutesService() {
             cancelled: c.cancelledAt !== null,
           }));
     return effectiveVersion(versions, changes, date);
+  }
+
+  async function plantLocation(tx: DbTransaction, plantId: string): Promise<LatLng | null> {
+    const [row] = await tx.$queryRaw<{ lat: number; lng: number }[]>`
+      SELECT ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng
+      FROM plants WHERE id = ${plantId}::uuid AND location IS NOT NULL`;
+    return row ?? null;
+  }
+
+  /**
+   * Trazo, distancia y tiempo de la versión. Con trazo dibujado se respeta (manual); si no, se
+   * calcula por calles con el servicio de rutas, incluyendo la planta como destino (entrada)
+   * u origen (salida). Si el servicio falla, se usa la línea recta y la operación sigue.
+   */
+  async function storePath(
+    tx: DbTransaction,
+    route: Route,
+    versionId: string,
+    input: VersionInput,
+  ) {
+    const stops = input.stops.map((stop) => stop.location);
+    let coordinates: [number, number][];
+    let durationMinutes: number;
+    let source: string;
+    let roadMeters: number | null = null;
+    if (input.path) {
+      coordinates = input.path;
+      source = 'manual';
+      durationMinutes = 0;
+    } else {
+      const plant = await plantLocation(tx, route.plantId);
+      const points = plant
+        ? route.direction === 'inbound'
+          ? [...stops, plant]
+          : [plant, ...stops]
+        : stops;
+      if (points.length < 2) return;
+      const result = await deps.routing.route(points);
+      coordinates = result.geometry;
+      durationMinutes = Math.max(1, Math.round(result.durationSeconds / 60));
+      source = result.source;
+      // Por calles se guarda la distancia que reporta el servicio; si no, la longitud del trazo.
+      if (result.source === 'osrm') roadMeters = result.distanceMeters;
+    }
+    if (coordinates.length < 2) return;
+    const geojson = JSON.stringify({ type: 'LineString', coordinates });
+    const [row] = await tx.$queryRaw<{ meters: number }[]>`
+      UPDATE route_versions
+      SET path = ST_SetSRID(ST_GeomFromGeoJSON(${geojson}), 4326)::geography,
+          distance_km = round((COALESCE(${roadMeters}::float8, ST_Length(ST_SetSRID(ST_GeomFromGeoJSON(${geojson}), 4326)::geography)) / 1000)::numeric, 2),
+          routing_source = ${source}
+      WHERE id = ${versionId}::uuid
+      RETURNING ST_Length(path) AS meters`;
+    const minutes =
+      source === 'manual'
+        ? estimateMinutes(row?.meters ?? 0, deps.averageSpeedKmh)
+        : durationMinutes;
+    await tx.routeVersion.update({ where: { id: versionId }, data: { durationMinutes: minutes } });
   }
 
   async function insertVersion(
@@ -186,18 +247,7 @@ export function createRoutesService() {
       });
     }
 
-    // Trazo: el enviado o la línea que une las paradas; la distancia la calcula PostGIS.
-    const coordinates =
-      input.path ??
-      input.stops.map((stop) => [stop.location.lng, stop.location.lat] as [number, number]);
-    if (coordinates.length >= 2) {
-      const geojson = JSON.stringify({ type: 'LineString', coordinates });
-      await tx.$executeRaw`
-        UPDATE route_versions
-        SET path = ST_SetSRID(ST_GeomFromGeoJSON(${geojson}), 4326)::geography,
-            distance_km = round((ST_Length(ST_SetSRID(ST_GeomFromGeoJSON(${geojson}), 4326)::geography) / 1000)::numeric, 2)
-        WHERE id = ${version.id}::uuid`;
-    }
+    await storePath(tx, route, version.id, input);
     return tx.routeVersion.findUniqueOrThrow({ where: { id: version.id } });
   }
 
@@ -293,6 +343,61 @@ export function createRoutesService() {
     versionDetail,
     findRoute,
     plantToday,
+
+    /** Parada de la versión más cercana a un punto, dentro del radio de la parada o del máximo dado. */
+    async nearestStop(tx: DbTransaction, versionId: string, point: LatLng, maxMeters?: number) {
+      const version = await tx.routeVersion.findFirst({
+        where: { id: versionId, deletedAt: null },
+      });
+      if (!version) throw new NotFoundError('No se encontró la versión.');
+      const [row] = await tx.$queryRaw<
+        { id: string; name: string; sequence: number; radius_meters: number; distance: number }[]
+      >`
+        SELECT id::text, name, sequence, radius_meters,
+               ST_Distance(location, ST_SetSRID(ST_MakePoint(${point.lng}, ${point.lat}), 4326)::geography) AS distance
+        FROM stops
+        WHERE route_version_id = ${versionId}::uuid
+        ORDER BY location <-> ST_SetSRID(ST_MakePoint(${point.lng}, ${point.lat}), 4326)::geography
+        LIMIT 1`;
+      if (!row) return { stop: null, distanceMeters: null };
+      const limit = maxMeters ?? row.radius_meters;
+      const distanceMeters = Math.round(row.distance * 10) / 10;
+      return distanceMeters <= limit
+        ? { stop: { id: row.id, name: row.name, sequence: row.sequence }, distanceMeters }
+        : { stop: null, distanceMeters };
+    },
+
+    /** Distancia de un punto al trazado de la versión (para detectar desvíos). */
+    async distanceToPath(
+      tx: DbTransaction,
+      versionId: string,
+      point: LatLng,
+      thresholdMeters: number,
+    ) {
+      const version = await tx.routeVersion.findFirst({
+        where: { id: versionId, deletedAt: null },
+      });
+      if (!version) throw new NotFoundError('No se encontró la versión.');
+      const [row] = await tx.$queryRaw<{ distance: number | null }[]>`
+        SELECT ST_Distance(path, ST_SetSRID(ST_MakePoint(${point.lng}, ${point.lat}), 4326)::geography) AS distance
+        FROM route_versions WHERE id = ${versionId}::uuid`;
+      if (row?.distance === null || row?.distance === undefined) {
+        throw new BadRequestError('La versión no tiene trazo.');
+      }
+      const distanceMeters = Math.round(row.distance * 10) / 10;
+      return { distanceMeters, thresholdMeters, offRoute: distanceMeters > thresholdMeters };
+    },
+
+    /** Calcula distancia, tiempo y trazo por calles para puntos dados (vista previa del editor). */
+    async preview(points: LatLng[]) {
+      const result = await deps.routing.route(points);
+      return {
+        distanceKm: Math.round(result.distanceMeters / 10) / 100,
+        durationMinutes: Math.max(1, Math.round(result.durationSeconds / 60)),
+        path: result.geometry,
+        source: result.source,
+      };
+    },
 
     // --- Turnos ---------------------------------------------------------------------
 

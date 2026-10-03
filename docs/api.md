@@ -192,6 +192,15 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 | GET/DELETE | /routes/:id/versions/:versionId | `routes.read` / `routes.write` | Detalle (paradas, horarios, trazo GeoJSON); eliminar solo futuras |
 | POST | /routes/:id/versions/:versionId/restore | `routes.write` | Restaurar una versión anterior como nueva |
 
+| POST | /routing/preview | `routes.read` | Distancia, tiempo y trazo por calles entre puntos (OSRM o línea recta) |
+| GET | /route-versions/:id/nearest-stop?lat=&lng=&maxMeters= | `routes.read` | Parada más cercana dentro del radio |
+| GET | /route-versions/:id/distance-to-path?lat=&lng=&thresholdMeters= | `routes.read` | Distancia al trazado y si es desvío |
+
+Rutas por calles: `ROUTING_PROVIDER=osrm` con `ROUTING_URL` (OSRM propio con extracto de
+México) o `straight_line`. Resultados en caché (tabla routing_cache, 30 días); si OSRM falla
+o tarda más de `ROUTING_TIMEOUT_MS`, se usa la línea recta y la operación sigue. Cada versión
+guarda su origen (`routingSource`: osrm, straight_line o manual).
+
 Vigencia de rutas: la versión regular aplica desde su `validFrom` hasta que empieza otra;
 un cambio temporal vigente gana a la versión regular. Las versiones que ya empezaron no se
 modifican (un cambio crea otra versión) y no se crean versiones en el pasado.

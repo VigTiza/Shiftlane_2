@@ -2,8 +2,8 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F03 — Rutas y paradas
-- Último prompt completado: F03-P01
-- Siguiente prompt: F03-P02 Cálculos geográficos
+- Último prompt completado: F03-P02
+- Siguiente prompt: F03-P03 Cambios temporales y simulación
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -13,9 +13,8 @@
     reiniciar: abrir Docker Desktop, `pnpm services:up` (verificar que minio-setup no rompa
     `--wait`) y correr las pruebas con Testcontainers / contra el compose, incluida la de S3
     (S3_TEST_ENDPOINT=http://localhost:9000).
-  - Push a GitHub: remoto origin = https://github.com/VigTiza/Shiftlane_2 (público), pero
-    falta iniciar sesión (`gh auth login` + `gh auth setup-git`). Los commits están locales
-    y el CI no ha corrido todavía.
+  - GitHub: origin = https://github.com/VigTiza/Shiftlane_2 (público), con acceso por el
+    administrador de credenciales de Git. Revisar el resultado del CI tras cada push.
 
 ## DECISIONES IMPORTANTES
 - 2026-10-02 Los .docx se convierten con pandoc 3.12 y un script propio
@@ -82,8 +81,28 @@
   Paradas con stop_key estable entre versiones. Una transportista nunca ve rutas ni turnos de
   otra en la misma planta; la planta ve las de sus transportistas. La auditoría omite el trazo
   PostGIS (app.enable_audit acepta columnas omitidas).
+- 2026-10-03 Rutas por calles con proveedor configurable (OSRM o línea recta), caché en la
+  base y respaldo automático; funciones geográficas en packages/shared (verificadas contra
+  PostGIS) y equivalentes PostGIS en el servidor.
 
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F03-P02 Cálculos geográficos
+- Hecho: packages/shared/src/geo.ts (haversine, longitud, distancia punto-segmento y al
+  trazado, parada más cercana con radio, tiempo estimado). src/lib/routing.ts: OSRM con
+  tiempo límite, línea recta, caché en routing_cache y respaldo automático. Las versiones de
+  ruta calculan trazo, distancia y tiempo por calles hasta la planta (o respetan el trazo
+  dibujado) y guardan routing_source. Endpoints de vista previa, parada más cercana y
+  distancia al trazado con PostGIS. Botón «Authorize» en /docs para probar con token.
+- Archivos principales: packages/shared/src/geo.ts, apps/api/src/lib/routing.ts,
+  src/modules/routes/{service,routes,schemas}.ts, prisma/migrations/*_routing.
+- Pruebas agregadas / resultado: 9 geográficas en shared con lugares de Ciudad Juárez y 9 en
+  la API (PostGIS vs shared ±0.5 %, OSRM simulado con caché, falla, tiempo agotado, trazo por
+  calles hasta la planta, trazo manual, parada más cercana, desvío, vista previa). 212
+  pruebas de la API y 37 de shared en verde.
+- Problemas encontrados y cómo se resolvieron: `app.routing` ya existe en Fastify (la
+  decoración se llama routingProvider).
+- Pendiente para después: OSRM propio con extracto de México en producción (F21).
+
 ### 2026-10-03 — F03-P01 Modelo de rutas con PostGIS
 - Hecho: lógica pura de vigencia (versioning.ts: versión efectiva por fecha con cambios
   temporales; horario de parada por día). Migración routes: shifts, routes (sentido, planta,

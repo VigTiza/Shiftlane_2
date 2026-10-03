@@ -36,7 +36,7 @@ afterAll(async () => {
 describe('configuración de seguridad por filas', () => {
   it('toda tabla de la aplicación tiene RLS activa y políticas para el rol de la API', async () => {
     // Tablas que solo usa el sistema (db.system): RLS activa y ninguna política = acceso denegado.
-    const SYSTEM_ONLY = ['password_reset_tokens'];
+    const SYSTEM_ONLY = ['password_reset_tokens', 'routing_cache'];
     const tables = await db.system.$queryRaw<{ table: string; rls: boolean; policies: number }[]>`
       SELECT c.relname AS table, c.relrowsecurity AS rls,
              (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies

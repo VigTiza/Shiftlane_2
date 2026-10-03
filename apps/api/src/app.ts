@@ -24,6 +24,13 @@ import type { Database } from './lib/db.ts';
 import { AppError } from './lib/errors.ts';
 import { createLogMailer, createSmtpMailer } from './lib/mailer.ts';
 import type { Mailer } from './lib/mailer.ts';
+import {
+  createDbRoutingCache,
+  createOsrmRouting,
+  createResilientRouting,
+  createStraightLineRouting,
+} from './lib/routing.ts';
+import type { RoutingProvider } from './lib/routing.ts';
 import { createLocalStorage, createS3Storage } from './lib/storage.ts';
 import type { ObjectStorage } from './lib/storage.ts';
 import { MAX_UPLOAD_BYTES } from './lib/uploads.ts';
@@ -55,6 +62,8 @@ export interface BuildAppOptions {
   mailer?: Mailer;
   /** Almacenamiento de archivos; por omisión según STORAGE_DRIVER. */
   storage?: ObjectStorage;
+  /** Servicio de rutas por calles; por omisión según ROUTING_PROVIDER. */
+  routing?: RoutingProvider;
 }
 
 function createStorage(env: Env): ObjectStorage {
@@ -79,7 +88,7 @@ function loggerOptions(env: Env): FastifyServerOptions['logger'] {
   };
 }
 
-export async function buildApp({ env, db, mailer, storage }: BuildAppOptions) {
+export async function buildApp({ env, db, mailer, storage, routing }: BuildAppOptions) {
   const app = Fastify({
     logger: loggerOptions(env),
     trustProxy: env.TRUST_PROXY,
@@ -119,6 +128,21 @@ export async function buildApp({ env, db, mailer, storage }: BuildAppOptions) {
   app.decorate('credentialSigner', createCredentialSigner(env.CREDENTIAL_SIGNING_KEY));
   app.decorate('mailer', mail);
   app.decorate('storage', storage ?? createStorage(env));
+  const straightLine = createStraightLineRouting(env.ROUTING_AVERAGE_SPEED_KMH);
+  app.decorate(
+    'routingProvider',
+    createResilientRouting({
+      primary:
+        routing ??
+        (env.ROUTING_PROVIDER === 'osrm' && env.ROUTING_URL
+          ? createOsrmRouting({ baseUrl: env.ROUTING_URL, timeoutMs: env.ROUTING_TIMEOUT_MS })
+          : straightLine),
+      fallback: straightLine,
+      cache: createDbRoutingCache(database.system),
+      onError: (error) =>
+        app.log.warn({ err: error }, 'Servicio de rutas no disponible; se usa línea recta'),
+    }),
+  );
   app.decorate('authServices', {
     auth: createAuthService({ ...authDeps, cipher, mailer: mail, appUrl: env.APP_URL }),
     drivers: createDriverAuthService(authDeps),
@@ -154,10 +178,20 @@ export async function buildApp({ env, db, mailer, storage }: BuildAppOptions) {
           description: 'API del SaaS de transporte de personal Shiftlane.',
           version: '0.1.0',
         },
+        components: {
+          securitySchemes: {
+            bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+          },
+        },
+        security: [{ bearerAuth: [] }],
       },
       transform: jsonSchemaTransform,
     });
-    await app.register(swaggerUi, { routePrefix: '/docs', staticCSP: true });
+    await app.register(swaggerUi, {
+      routePrefix: '/docs',
+      staticCSP: true,
+      uiConfig: { persistAuthorization: true, docExpansion: 'none', filter: true },
+    });
   }
 
   await app.register(healthRoutes);

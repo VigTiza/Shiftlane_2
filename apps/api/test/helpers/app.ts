@@ -6,6 +6,7 @@ import { loadEnv } from '../../src/config/env.ts';
 import { generateCredentialKey } from '../../src/lib/credential-signer.ts';
 import { createMemoryMailer } from '../../src/lib/mailer.ts';
 import type { Mailer } from '../../src/lib/mailer.ts';
+import type { RoutingProvider } from '../../src/lib/routing.ts';
 import { createMemoryStorage } from '../../src/lib/storage.ts';
 
 /** Secretos fijos solo para pruebas. */
@@ -22,12 +23,15 @@ export interface TestAppOptions {
   beforeReady?: (app: App) => void;
   /** Por omisión, un buzón en memoria (app.mailer.sent). */
   mailer?: Mailer;
+  /** Servicio de rutas (por omisión, línea recta). */
+  routing?: RoutingProvider;
 }
 
 export async function buildTestApp({
   env = {},
   beforeReady,
   mailer = createMemoryMailer(),
+  routing,
 }: TestAppOptions = {}): Promise<App> {
   const storage = createMemoryStorage();
   const app = await buildApp({
@@ -42,6 +46,7 @@ export async function buildTestApp({
     }),
     mailer,
     storage,
+    ...(routing ? { routing } : {}),
   });
   beforeReady?.(app);
   await app.ready();

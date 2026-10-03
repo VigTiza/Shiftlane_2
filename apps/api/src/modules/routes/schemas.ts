@@ -144,6 +144,8 @@ export const versionSummary = z.object({
   durationMinutes: z.number().int().nullable(),
   stopsCount: z.number().int(),
   basedOnId: z.uuid().nullable(),
+  /** osrm (por calles), straight_line (respaldo) o manual (trazo dibujado). */
+  routingSource: z.string().nullable(),
   notes: z.string().nullable(),
   createdAt: z.date(),
   /** Es la versión regular vigente hoy. */
@@ -179,6 +181,39 @@ export const routeDetail = routeSummary.extend({
       cancelled: z.boolean(),
     }),
   ),
+});
+
+const latLngQuery = {
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180),
+};
+
+export const nearestStopQuery = z.object({
+  ...latLngQuery,
+  maxMeters: z.coerce.number().int().min(5).max(5000).optional(),
+});
+export const distanceToPathQuery = z.object({
+  ...latLngQuery,
+  thresholdMeters: z.coerce.number().int().min(10).max(5000).optional(),
+});
+export const previewBody = z.object({
+  points: z.array(latLng).min(2, 'Indica al menos dos puntos.').max(80),
+});
+
+export const nearestStopResponse = z.object({
+  stop: z.object({ id: z.uuid(), name: z.string(), sequence: z.number().int() }).nullable(),
+  distanceMeters: z.number().nullable(),
+});
+export const distanceToPathResponse = z.object({
+  distanceMeters: z.number(),
+  thresholdMeters: z.number(),
+  offRoute: z.boolean(),
+});
+export const previewResponse = z.object({
+  distanceKm: z.number(),
+  durationMinutes: z.number().int(),
+  path: z.array(z.tuple([z.number(), z.number()])),
+  source: z.enum(['osrm', 'straight_line']),
 });
 
 export const effectiveResponse = z.object({

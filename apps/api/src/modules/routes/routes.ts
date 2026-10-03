@@ -7,6 +7,12 @@ import { authOf, dbContextOf, requirePermission, tenantIdOf } from '../../plugin
 import {
   createRouteBody,
   createShiftBody,
+  distanceToPathQuery,
+  distanceToPathResponse,
+  nearestStopQuery,
+  nearestStopResponse,
+  previewBody,
+  previewResponse,
   effectiveQuery,
   effectiveResponse,
   listRoutesQuery,
@@ -26,7 +32,10 @@ import { createRoutesService } from './service.ts';
 const TAGS = ['Rutas'];
 
 export const routeRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
-  const service = createRoutesService();
+  const service = createRoutesService({
+    routing: app.routingProvider,
+    averageSpeedKmh: app.config.ROUTING_AVERAGE_SPEED_KMH,
+  });
   const canRead = requirePermission(app, 'routes.read');
   const canWrite = requirePermission(app, 'routes.write');
   const canReadShifts = requirePermission(app, 'routes.read', 'schedule.read', 'settings.manage');
@@ -270,6 +279,66 @@ export const routeRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
       );
       return reply.status(204).send(null);
     },
+  );
+
+  app.post(
+    '/routing/preview',
+    {
+      onRequest: canRead,
+      schema: {
+        tags: TAGS,
+        summary: 'Distancia, tiempo y trazo por calles entre puntos (vista previa del editor)',
+        body: previewBody,
+        response: { 200: previewResponse },
+      },
+    },
+    (request) => service.preview(request.body.points),
+  );
+
+  app.get(
+    '/route-versions/:id/nearest-stop',
+    {
+      onRequest: canRead,
+      schema: {
+        tags: TAGS,
+        summary: 'Parada más cercana a un punto (asignación automática al escanear)',
+        params: idParams,
+        querystring: nearestStopQuery,
+        response: { 200: nearestStopResponse },
+      },
+    },
+    (request) =>
+      withDbContext(app.db.app, dbContextOf(request), (tx) =>
+        service.nearestStop(
+          tx,
+          request.params.id,
+          { lat: request.query.lat, lng: request.query.lng },
+          request.query.maxMeters,
+        ),
+      ),
+  );
+
+  app.get(
+    '/route-versions/:id/distance-to-path',
+    {
+      onRequest: canRead,
+      schema: {
+        tags: TAGS,
+        summary: 'Distancia de un punto al trazado (detección de desvíos)',
+        params: idParams,
+        querystring: distanceToPathQuery,
+        response: { 200: distanceToPathResponse },
+      },
+    },
+    (request) =>
+      withDbContext(app.db.app, dbContextOf(request), (tx) =>
+        service.distanceToPath(
+          tx,
+          request.params.id,
+          { lat: request.query.lat, lng: request.query.lng },
+          request.query.thresholdMeters ?? app.config.OFF_ROUTE_THRESHOLD_METERS,
+        ),
+      ),
   );
 
   done();

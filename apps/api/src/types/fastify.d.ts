@@ -3,6 +3,7 @@ import type { CredentialSigner } from '../lib/credential-signer.ts';
 import type { Cipher } from '../lib/crypto.ts';
 import type { Database } from '../lib/db.ts';
 import type { Mailer } from '../lib/mailer.ts';
+import type { RoutingProvider } from '../lib/routing.ts';
 import type { ObjectStorage } from '../lib/storage.ts';
 import type { DriverAuthService } from '../modules/auth/driver-service.ts';
 import type { createPassengerAuthService } from '../modules/auth/passenger-service.ts';
@@ -18,6 +19,7 @@ declare module 'fastify' {
     credentialSigner: CredentialSigner;
     mailer: Mailer;
     storage: ObjectStorage;
+    routingProvider: RoutingProvider;
     authServices: {
       auth: AuthService;
       drivers: DriverAuthService;
