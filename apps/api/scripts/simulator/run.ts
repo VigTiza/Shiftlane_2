@@ -14,6 +14,9 @@ import {
 import { api } from './setup.ts';
 import type { SimFleet, SimUnit } from './setup.ts';
 
+/** Paso máximo entre dos puntos registrados (fracción del recorrido). */
+const MAX_STEP = 0.02;
+
 const CHECKLIST = ['tires', 'brakes', 'lights', 'cleanliness', 'extinguisher', 'first_aid'].map(
   (key) => ({ key, ok: true }),
 );
@@ -46,6 +49,11 @@ interface UnitState {
   }[];
   sequence: number;
   wasInZone: boolean;
+  /** Hasta dónde llegó y cuándo (para registrar los puntos intermedios). */
+  fraction: number;
+  lastAt: number;
+  battery: number;
+  criticalReported: boolean;
 }
 
 export interface RunSummary {
@@ -99,6 +107,10 @@ export async function runShift(options: {
       events: [],
       sequence: 0,
       wasInZone: false,
+      fraction: 0,
+      lastAt: Date.now(),
+      battery: unit.plan.behavior === 'dead_battery' ? BATTERY.start : 85,
+      criticalReported: false,
     };
   });
 
@@ -113,9 +125,12 @@ export async function runShift(options: {
     });
   }
   log(`Turno iniciado: ${states.length} unidades en ruta.`);
+  // Los puntos empiezan después del inicio de cada viaje.
+  const startedAt = Date.now();
+  for (const state of states) state.lastAt = startedAt;
 
-  async function flush(state: UnitState, current?: Position) {
-    const batch = [...state.positions, ...(current ? [current] : [])];
+  async function flush(state: UnitState) {
+    const batch = state.positions;
     state.positions = [];
     if (batch.length > 0) {
       await api(baseUrl, 'POST', '/driver/positions', {
@@ -135,21 +150,53 @@ export async function runShift(options: {
     }
   }
 
-  async function tick(state: UnitState, progress: number, tickNumber: number) {
-    if (state.done || state.dead) return;
-    const { unit } = state;
-    const fraction = Math.min(1, progress);
-    const now = new Date().toISOString();
+  async function sendHealth(state: UnitState, at: string) {
+    await api(baseUrl, 'POST', '/driver/health', {
+      auth: state.unit.driverAuth,
+      body: {
+        sentAt: new Date().toISOString(),
+        reports: [
+          {
+            recordedAt: at,
+            tripId: state.unit.tripId,
+            batteryPct: state.battery,
+            charging: false,
+            networkType: 'cellular',
+            signalLevel: 3,
+            locationPermission: 'always',
+            gpsEnabled: true,
+            backgroundAllowed: true,
+            batteryOptimizationIgnored: true,
+            cameraPermission: true,
+            appVersion: '1.0.0',
+            platform: 'android',
+            deviceModel: 'Simulador',
+          },
+        ],
+      },
+    });
+  }
 
-    let battery = 85;
+  /**
+   * Un paso del recorrido en un instante. Lo que pasa sin señal queda guardado en el celular
+   * (posiciones y escaneos) y se envía al salir de la zona.
+   */
+  async function step(state: UnitState, fraction: number, at: Date) {
+    const { unit } = state;
+    const when = at.toISOString();
     if (unit.plan.behavior === 'dead_battery') {
       // Se apaga al 60 % del recorrido.
-      battery = Math.round(BATTERY.start - ((BATTERY.start - BATTERY.off) * fraction) / 0.6);
-      if (battery <= BATTERY.off) {
+      state.battery = Math.round(BATTERY.start - ((BATTERY.start - BATTERY.off) * fraction) / 0.6);
+      if (state.battery <= BATTERY.off) {
         state.dead = true;
         summary.silenced += 1;
         log(`${unit.vehicleNumber}: el celular se quedó sin batería.`);
         return;
+      }
+      // La app avisa en cuanto la batería llega a nivel crítico, antes de apagarse.
+      if (state.battery <= BATTERY.off + 3 && !state.criticalReported) {
+        state.criticalReported = true;
+        await sendHealth(state, when);
       }
     }
 
@@ -159,36 +206,10 @@ export async function runShift(options: {
     }
     const inZone = insideDeadZone(point);
     if (inZone && !state.wasInZone) log(`${unit.vehicleNumber}: entró a la zona sin señal.`);
-    if (!inZone && state.wasInZone)
+    if (!inZone && state.wasInZone) {
       log(`${unit.vehicleNumber}: recuperó la señal y envía lo guardado.`);
-    state.wasInZone = inZone;
-
-    if (!inZone && (unit.plan.behavior === 'dead_battery' || tickNumber % healthEvery === 0)) {
-      await api(baseUrl, 'POST', '/driver/health', {
-        auth: unit.driverAuth,
-        body: {
-          sentAt: now,
-          reports: [
-            {
-              recordedAt: now,
-              tripId: unit.tripId,
-              batteryPct: battery,
-              charging: false,
-              networkType: 'cellular',
-              signalLevel: 3,
-              locationPermission: 'always',
-              gpsEnabled: true,
-              backgroundAllowed: true,
-              batteryOptimizationIgnored: true,
-              cameraPermission: true,
-              appVersion: '1.0.0',
-              platform: 'android',
-              deviceModel: 'Simulador',
-            },
-          ],
-        },
-      });
     }
+    state.wasInZone = inZone;
 
     // Escanea a los pasajeros de cada parada a la que llega.
     while (
@@ -203,7 +224,7 @@ export async function runShift(options: {
             id: randomUUID(),
             type: 'scan',
             sequence: state.sequence++,
-            occurredAt: now,
+            occurredAt: when,
             tripId: unit.tripId,
             data: { employeeNumber, ...stop },
           });
@@ -217,16 +238,39 @@ export async function runShift(options: {
       state.nextStop += 1;
     }
 
-    const position: Position = {
+    state.positions.push({
       tripId: unit.tripId,
-      recordedAt: now,
+      recordedAt: when,
       ...point,
       speedKmh: unit.plan.behavior === 'off_route' ? 45 : 32,
-    };
-    if (inZone) state.positions.push(position);
-    else await flush(state, position);
+    });
+  }
 
-    if (fraction >= 1) {
+  async function tick(state: UnitState, progress: number, tickNumber: number) {
+    if (state.done || state.dead) return;
+    const { unit } = state;
+    const target = Math.min(1, progress);
+    const from = state.fraction;
+    const startedAt = state.lastAt;
+    const now = Date.now();
+    // Como el celular real: registra los puntos intermedios aunque la vuelta haya tardado.
+    const steps = Math.max(1, Math.ceil((target - from) / MAX_STEP));
+    for (let i = 1; i <= steps && !state.dead; i += 1) {
+      const fraction = from + ((target - from) * i) / steps;
+      await step(state, fraction, new Date(startedAt + ((now - startedAt) * i) / steps));
+    }
+    state.fraction = target;
+    state.lastAt = now;
+    if (state.dead) return;
+
+    if (!state.wasInZone) {
+      if (unit.plan.behavior === 'dead_battery' || tickNumber % healthEvery === 0) {
+        await sendHealth(state, new Date(now).toISOString());
+      }
+      await flush(state);
+    }
+
+    if (target >= 1) {
       await flush(state);
       await api(baseUrl, 'POST', `/driver/trips/${unit.tripId}/gate`, {
         auth: unit.driverAuth,

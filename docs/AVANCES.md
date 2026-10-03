@@ -219,7 +219,9 @@
 - Problemas encontrados y cómo se resolvieron: con 4 paradas y hasta 5 pasajeros por parada
   aparecía sobrecupo no planeado; las unidades simuladas tienen 24 asientos. Una prueba de
   alertas evaluaba todas las empresas de la base compartida y abría antes la alerta del
-  simulador: runMinute acepta tenantIds y las pruebas evalúan solo su empresa.
+  simulador: runMinute acepta tenantIds y las pruebas evalúan solo su empresa. En el CI
+  (más lento) las unidades «saltaban» la zona sin señal entre vueltas: ahora cada vuelta
+  registra los puntos intermedios con su hora y la batería crítica se avisa al momento.
 - Pendiente para después: usarlo para probar el panel (F08) y el portal (F09).
 
 ### 2026-10-03 — F06-P02 Reportes de salud del celular y diagnóstico
