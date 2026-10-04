@@ -23,6 +23,21 @@ export const healthReport = z.object({
   deviceModel: z.string().trim().max(80).optional(),
 });
 
+export const pushTokenBody = z.object({
+  /** Token de Firebase Cloud Messaging del celular (vacío para dejar de recibir avisos). */
+  token: z.string().trim().max(4096).nullable(),
+});
+
+export const pushTokenResponse = z.object({ saved: z.boolean() });
+
+export const appVersionResponse = z.object({
+  /** Con una versión menor la app pide actualizar y no deja seguir. */
+  minVersion: z.string().nullable(),
+  /** Si hay una más nueva, la app sugiere actualizar (sin obligar). */
+  latestVersion: z.string().nullable(),
+  downloadUrl: z.string().nullable(),
+});
+
 export const healthBody = z.object({
   /** Hora del celular al enviar: con la del servidor da el desfase de su reloj. */
   sentAt: z.coerce.date(),

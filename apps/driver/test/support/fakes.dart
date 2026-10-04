@@ -11,7 +11,13 @@ import 'package:shiftlane_driver/app.dart';
 import 'package:dio/dio.dart';
 import 'package:shiftlane_driver/application/auth/auth_providers.dart';
 import 'package:shiftlane_driver/application/device_check/device_check_controller.dart';
+import 'package:shiftlane_driver/application/push/push_controller.dart';
 import 'package:shiftlane_driver/application/realtime/realtime_providers.dart';
+import 'package:shiftlane_driver/application/update/update_controller.dart';
+import 'package:shiftlane_driver/data/app_version/app_version_api.dart';
+import 'package:shiftlane_driver/data/local/local_flags.dart';
+import 'package:shiftlane_driver/data/push/push_service.dart';
+import 'package:shiftlane_driver/domain/app_version/app_version.dart';
 import 'package:shiftlane_driver/application/scan/scan_controller.dart';
 import 'package:shiftlane_driver/data/scan/audio_scan_feedback.dart';
 import 'package:shiftlane_driver/data/scan/manifest_repository.dart';
@@ -328,6 +334,49 @@ class FakeManifestApi extends ManifestApi {
   }
 }
 
+/// Firebase de prueba: entrega un token y deja empujar avisos.
+class FakePushService implements PushService {
+  String? token = 'fcm-token-de-prueba';
+  final tokens = StreamController<String>.broadcast();
+  final controller = StreamController<PushNotice>.broadcast();
+  int starts = 0;
+
+  @override
+  Future<String?> start() async {
+    starts += 1;
+    return token;
+  }
+
+  @override
+  Stream<String> get tokenChanges => tokens.stream;
+
+  @override
+  Stream<PushNotice> get notices => controller.stream;
+}
+
+class FakePushTokenApi extends PushTokenApi {
+  FakePushTokenApi() : super(ApiClient(Dio()));
+
+  final List<String?> saved = [];
+
+  @override
+  Future<void> save(String? token) async => saved.add(token);
+}
+
+class FakeAppVersionApi extends AppVersionApi {
+  FakeAppVersionApi([this.info = const AppVersionInfo()])
+    : super(ApiClient(Dio()));
+
+  AppVersionInfo info;
+  bool offline = false;
+
+  @override
+  Future<AppVersionInfo> fetch() async {
+    if (offline) throw const NetworkFailure();
+    return info;
+  }
+}
+
 class FakeScanFeedback implements ScanFeedback {
   final List<ScanOutcome> played = [];
 
@@ -391,9 +440,11 @@ class FakeTripRepository implements TripRepository {
   ];
   final List<String> uploads = [];
   bool offline = false;
+  int loads = 0;
 
   @override
   Future<List<DriverTrip>> todayTrips() async {
+    loads += 1;
     if (offline) throw const NetworkFailure();
     return trips.map(DriverTrip.fromJson).toList();
   }
@@ -580,11 +631,23 @@ Future<ProviderContainer> pumpApp(
   AppDatabase? database,
   FakeManifestApi? manifests,
   FakeScanFeedback? feedback,
+  FakePushService? push,
+  FakePushTokenApi? pushTokens,
+  FakeAppVersionApi? versions,
+  String appVersion = '0.1.0',
+  List<Uri>? openedUrls,
+  bool tutorialSeen = true,
 }) async {
   final deviceProbe = probe ?? FakeDeviceProbe();
   // Con [database] la prueba maneja la base (por ejemplo, para simular un reinicio).
   final db = database ?? AppDatabase(NativeDatabase.memory());
   if (database == null) addTearDown(db.close);
+  if (tutorialSeen) {
+    final flags = LocalFlags(db);
+    for (final driver in ['d1', 'd2']) {
+      await flags.set('tutorial_seen:$driver');
+    }
+  }
   final container = ProviderContainer(
     // Sin reintentos automáticos de Riverpod (dejarían temporizadores pendientes).
     retry: (_, _) => null,
@@ -618,6 +681,14 @@ Future<ProviderContainer> pumpApp(
       codeScannerProvider.overrideWithValue(fakeCodeScanner),
       manifestApiProvider.overrideWithValue(manifests ?? FakeManifestApi()),
       scanFeedbackProvider.overrideWithValue(feedback ?? FakeScanFeedback()),
+      pushServiceProvider.overrideWithValue(push ?? FakePushService()),
+      pushTokenApiProvider.overrideWithValue(pushTokens ?? FakePushTokenApi()),
+      appVersionApiProvider.overrideWithValue(versions ?? FakeAppVersionApi()),
+      currentAppVersionProvider.overrideWith((ref) async => appVersion),
+      urlOpenerProvider.overrideWithValue((uri) async {
+        openedUrls?.add(uri);
+        return true;
+      }),
       photoCaptureProvider.overrideWithValue(
         () async => (bytes: <int>[1, 2, 3], name: 'foto.jpg'),
       ),

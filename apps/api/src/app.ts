@@ -43,6 +43,8 @@ import {
   createStraightLineRouting,
 } from './lib/routing.ts';
 import type { RoutingProvider } from './lib/routing.ts';
+import { createDisabledPushSender, createFcmPushSender, parseServiceAccount } from './lib/push.ts';
+import type { PushSender } from './lib/push.ts';
 import { createLocalStorage, createS3Storage } from './lib/storage.ts';
 import type { ObjectStorage } from './lib/storage.ts';
 import { MAX_UPLOAD_BYTES } from './lib/uploads.ts';
@@ -65,6 +67,7 @@ import { routeRoutes } from './modules/routes/routes.ts';
 import { syncRoutes } from './modules/sync/routes.ts';
 import { tripRoutes } from './modules/trips/routes.ts';
 import { createAlertEngine } from './modules/alerts/engine.ts';
+import { createDriverPush } from './modules/devices/driver-push.ts';
 import { alertRoutes } from './modules/alerts/routes.ts';
 import { deviceRoutes } from './modules/devices/routes.ts';
 import { createRoutesService } from './modules/routes/service.ts';
@@ -88,6 +91,8 @@ export interface BuildAppOptions {
   routing?: RoutingProvider;
   /** Posiciones en vivo; por omisión Redis si hay REDIS_URL, si no memoria. */
   liveStore?: LiveStore;
+  /** Avisos al celular; por omisión FCM si hay FIREBASE_SERVICE_ACCOUNT, si no apagados. */
+  push?: PushSender;
 }
 
 function createStorage(env: Env): ObjectStorage {
@@ -112,7 +117,15 @@ function loggerOptions(env: Env): FastifyServerOptions['logger'] {
   };
 }
 
-export async function buildApp({ env, db, mailer, storage, routing, liveStore }: BuildAppOptions) {
+export async function buildApp({
+  env,
+  db,
+  mailer,
+  storage,
+  routing,
+  liveStore,
+  push,
+}: BuildAppOptions) {
   const app = Fastify({
     logger: loggerOptions(env),
     trustProxy: env.TRUST_PROXY,
@@ -214,6 +227,21 @@ export async function buildApp({ env, db, mailer, storage, routing, liveStore }:
   app.addHook('onClose', async () => {
     alerts.close();
     await alerts.idle();
+  });
+  const pushSender =
+    push ??
+    (env.FIREBASE_SERVICE_ACCOUNT
+      ? createFcmPushSender({
+          account: parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT),
+          log: app.log,
+        })
+      : createDisabledPushSender());
+  app.decorate('push', pushSender);
+  const driverPush = createDriverPush({ db: database, events, push: pushSender, log: app.log });
+  app.decorate('driverPush', driverPush);
+  app.addHook('onClose', async () => {
+    driverPush.close();
+    await driverPush.idle();
   });
   app.addHook('onClose', (_instance, done) => {
     realtime.close();

@@ -471,19 +471,22 @@ model DriverEnrollment {
 
 /// Celular registrado. Se autentica con un secreto que solo conoce la app (se guarda su hash).
 model Device {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId      String    @map("tenant_id") @db.Uuid
-  secretHash    String    @map("secret_hash")
-  platform      String?
-  model         String?
-  appVersion    String?   @map("app_version")
-  lastSeenAt    DateTime? @map("last_seen_at") @db.Timestamptz(3)
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  secretHash         String    @map("secret_hash")
+  platform           String?
+  model              String?
+  appVersion         String?   @map("app_version")
+  lastSeenAt         DateTime? @map("last_seen_at") @db.Timestamptz(3)
   /// Última sincronización y desfase de su reloj (hora del servidor menos hora del celular).
-  lastSyncAt    DateTime? @map("last_sync_at") @db.Timestamptz(3)
-  clockOffsetMs Int?      @map("clock_offset_ms")
-  revokedAt     DateTime? @map("revoked_at") @db.Timestamptz(3)
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  lastSyncAt         DateTime? @map("last_sync_at") @db.Timestamptz(3)
+  clockOffsetMs      Int?      @map("clock_offset_ms")
+  /// Token de Firebase Cloud Messaging para avisos con la app cerrada.
+  pushToken          String?   @map("push_token")
+  pushTokenUpdatedAt DateTime? @map("push_token_updated_at") @db.Timestamptz(3)
+  revokedAt          DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   tenant        Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   drivers       DriverDevice[]

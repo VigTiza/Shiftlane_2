@@ -7,6 +7,8 @@ import '../../core/logging/app_logger.dart';
 import '../../data/sync/sync_api.dart';
 import '../../domain/trips/pending_overlay.dart';
 import '../../domain/trips/trip_models.dart';
+import '../auth/auth_controller.dart';
+import '../auth/auth_providers.dart';
 import '../providers.dart';
 import '../sync/sync_coordinator.dart';
 import '../tracking/trip_tracking.dart';
@@ -18,8 +20,18 @@ import 'trip_providers.dart';
 class TripsController extends AsyncNotifier<List<DriverTrip>> {
   final _log = appLogger('trips');
 
+  /// Chofer con sesión: al cambiar de chofer (celular compartido) se recarga la lista.
+  String? _driverId;
+
   @override
-  Future<List<DriverTrip>> build() => _load();
+  Future<List<DriverTrip>> build() {
+    _driverId = ref.watch(
+      authControllerProvider.select(
+        (auth) => auth is AuthSignedIn ? auth.session.driverId : null,
+      ),
+    );
+    return _load();
+  }
 
   Future<void> refresh() async {
     state = await AsyncValue.guard(_load);
@@ -27,6 +39,8 @@ class TripsController extends AsyncNotifier<List<DriverTrip>> {
 
   /// Del servidor más lo que sigue en la cola; sin señal, la copia guardada.
   Future<List<DriverTrip>> _load() async {
+    final driverId = _driverId;
+    if (driverId == null) return const [];
     final snapshots = ref.read(tripSnapshotStoreProvider);
     try {
       final trips = await ref.read(tripRepositoryProvider).todayTrips();
@@ -34,10 +48,10 @@ class TripsController extends AsyncNotifier<List<DriverTrip>> {
           .read(outboxRepositoryProvider)
           .pending(limit: 5000, positions: false);
       final merged = applyPendingEvents(trips, pending);
-      await snapshots.save(merged);
+      await snapshots.save(driverId, merged);
       return merged;
     } on AppFailure catch (failure) {
-      final saved = await snapshots.load();
+      final saved = await snapshots.load(driverId);
       if (saved == null) rethrow;
       _log.info('Viajes desde la copia del celular: ${failure.message}');
       return saved;
@@ -64,7 +78,9 @@ class TripsController extends AsyncNotifier<List<DriverTrip>> {
 
   void _replace(DriverTrip trip) {
     state = AsyncData([for (final t in _trips) t.id == trip.id ? trip : t]);
-    unawaited(ref.read(tripSnapshotStoreProvider).save(_trips));
+    if (_driverId != null) {
+      unawaited(ref.read(tripSnapshotStoreProvider).save(_driverId!, _trips));
+    }
   }
 
   DriverTrip _byId(String id) => _trips.firstWhere((t) => t.id == id);

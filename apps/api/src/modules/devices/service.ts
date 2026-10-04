@@ -57,6 +57,17 @@ export function createDevicesService(deps: {
   minAppVersion?: string | undefined;
 }) {
   return {
+    /** Guarda el token de avisos del celular de la sesión (uno por celular). */
+    async savePushToken(context: DbContext, session: { deviceId: string }, token: string | null) {
+      const result = await withDbContext(deps.db.app, context, (tx) =>
+        tx.device.updateMany({
+          where: { id: session.deviceId, revokedAt: null },
+          data: { pushToken: token || null, pushTokenUpdatedAt: new Date() },
+        }),
+      );
+      return { saved: result.count === 1 };
+    },
+
     async ingest(
       context: DbContext,
       session: { tenantId: string; driverId: string; deviceId: string },

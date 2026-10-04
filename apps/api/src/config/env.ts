@@ -87,6 +87,18 @@ const envSchema = z
       .string()
       .regex(/^\d+(\.\d+)*$/)
       .optional(),
+    /** Última versión publicada de la app del chofer (aviso de actualización opcional). */
+    LATEST_DRIVER_APP_VERSION: z
+      .string()
+      .regex(/^\d+(\.\d+)*$/)
+      .optional(),
+    /** Dónde se descarga el APK del chofer (la app lo abre al pedir actualizar). */
+    DRIVER_APP_DOWNLOAD_URL: z.url().optional(),
+    /**
+     * Cuenta de servicio de Firebase (JSON o JSON en base64) para avisos con la app cerrada.
+     * Sin ella los avisos llegan solo por tiempo real con la app abierta.
+     */
+    FIREBASE_SERVICE_ACCOUNT: z.string().min(20).optional(),
   })
   .superRefine((env, ctx) => {
     if (env.ROUTING_PROVIDER === 'osrm' && !env.ROUTING_URL) {

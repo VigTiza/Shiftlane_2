@@ -7,11 +7,13 @@ import '../../application/auth/auth_providers.dart';
 import '../../application/device_check/device_check_controller.dart';
 import '../../application/providers.dart';
 import '../../application/scan/scan_controller.dart';
+import '../../application/update/update_controller.dart';
 import '../../application/trips/trip_providers.dart';
 import '../../application/trips/trips_controller.dart';
 import '../../core/errors/app_failure.dart';
 import '../../core/router/app_routes.dart';
 import '../../core/theme/app_theme.dart';
+import '../../domain/app_version/app_version.dart';
 import '../../domain/device_check/device_check.dart';
 import '../../domain/trips/trip_models.dart';
 import '../widgets/big_button.dart';
@@ -87,6 +89,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final canStart =
         current?.status == TripStatus.scheduled &&
         mayStartTrip(check, dispatcherException: current!.exceptionAuthorized);
+    final update = ref.watch(updateControllerProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -105,10 +108,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ref.read(authControllerProvider.notifier).switchDriver();
                 case 'check':
                   context.push(AppRoutes.deviceCheck);
+                case 'tutorial':
+                  context.push(AppRoutes.tutorial);
+                case 'help':
+                  context.push(AppRoutes.help);
               }
             },
             itemBuilder: (context) => const [
               PopupMenuItem(value: 'check', child: Text('Revisar el celular')),
+              PopupMenuItem(value: 'help', child: Text('Tengo un problema')),
+              PopupMenuItem(value: 'tutorial', child: Text('Ver tutorial')),
               PopupMenuItem(value: 'switch', child: Text('Cambiar de chofer')),
             ],
           ),
@@ -139,6 +148,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 96),
             children: [
+              if (update.level != UpdateLevel.none) ...[
+                MaterialBanner(
+                  key: const Key('update-banner'),
+                  backgroundColor: ShiftlaneColors.blue.withValues(alpha: 0.1),
+                  content: Text(
+                    update.level == UpdateLevel.required
+                        ? 'Al terminar el viaje tendrás que actualizar la app.'
+                        : 'Hay una versión nueva de la app '
+                              '(${update.info?.latestVersion}).',
+                  ),
+                  actions: [
+                    if (update.info?.downloadUrl != null)
+                      TextButton(
+                        key: const Key('update-banner-action'),
+                        onPressed: () => ref.read(urlOpenerProvider)(
+                          Uri.parse(update.info!.downloadUrl!),
+                        ),
+                        child: const Text('Actualizar'),
+                      )
+                    else
+                      const SizedBox.shrink(),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
               if (check != null && !check.canStartTrip) ...[
                 MaterialBanner(
                   key: const Key('home-check-banner'),
@@ -182,6 +216,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ? () => context.push(AppRoutes.arrival)
                     : null,
                 color: ShiftlaneColors.red,
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                key: const Key('home-help'),
+                onPressed: () => context.push(AppRoutes.help),
+                icon: const Icon(Icons.support_agent),
+                label: const Text('Tengo un problema'),
               ),
               const SizedBox(height: 24),
               Text(

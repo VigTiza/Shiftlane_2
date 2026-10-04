@@ -4,6 +4,9 @@ import { withDbContext } from '../../lib/db.ts';
 import { idParams } from '../../lib/http-schemas.ts';
 import { authOf, dbContextOf, requireAuth, requirePermission } from '../../plugins/auth.ts';
 import {
+  appVersionResponse,
+  pushTokenBody,
+  pushTokenResponse,
   deviceList,
   diagnosisResponse,
   healthBody,
@@ -44,6 +47,44 @@ export const deviceRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
         request.body,
       );
     },
+  );
+
+  app.post(
+    '/driver/push-token',
+    {
+      onRequest: requireAuth(app, { kinds: ['driver'] }),
+      schema: {
+        tags: ['App del chofer'],
+        summary: 'Token de avisos (Firebase) del celular',
+        description:
+          'Los mensajes del despachador, cancelaciones y cambios de ruta llegan aunque la app esté cerrada.',
+        body: pushTokenBody,
+        response: { 200: pushTokenResponse },
+      },
+    },
+    (request) =>
+      service.savePushToken(
+        dbContextOf(request),
+        { deviceId: authOf(request, 'driver').deviceId },
+        request.body.token,
+      ),
+  );
+
+  app.get(
+    '/driver/app-version',
+    {
+      schema: {
+        tags: ['App del chofer'],
+        summary: 'Versión mínima y última de la app del chofer',
+        description: 'Pública: la app la revisa al abrir, aun sin sesión.',
+        response: { 200: appVersionResponse },
+      },
+    },
+    () => ({
+      minVersion: app.config.MIN_DRIVER_APP_VERSION ?? null,
+      latestVersion: app.config.LATEST_DRIVER_APP_VERSION ?? null,
+      downloadUrl: app.config.DRIVER_APP_DOWNLOAD_URL ?? null,
+    }),
   );
 
   app.get(

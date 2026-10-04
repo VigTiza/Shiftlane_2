@@ -16,6 +16,8 @@ dependencies:
   dio: ^5.11.1
   drift: ^2.35.1
   drift_flutter: ^0.3.1
+  firebase_core: ^4.15.0
+  firebase_messaging: ^16.7.0
   flutter:
     sdk: flutter
   flutter_map: ^8.3.2
@@ -33,6 +35,7 @@ dependencies:
   path_provider: ^2.1.6
   permission_handler: ^13.0.2
   socket_io_client: ^3.1.6
+  url_launcher: ^6.3.3
   uuid: ^4.6.0
 
 dev_dependencies:
@@ -42,6 +45,8 @@ dev_dependencies:
   drift_dev: ^2.35.1
   build_runner: ^2.16.1
   mocktail: ^1.0.5
+  integration_test:
+    sdk: flutter
 
 flutter:
   uses-material-design: true

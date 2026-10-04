@@ -83,6 +83,12 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
   una unidad que salió tarde (retraso), una que se desvía, un celular que se queda sin batería
   (su alerta de unidad sin reportar sale 5 min después) y tres que cruzan una zona sin señal
   (guardan y sincronizan al salir). Con menos de ~10 minutos todas las unidades salen con retraso.
+- `pnpm e2e:chofer -- --units 4 --minutes 3` — prueba integral: con la API local en marcha,
+  la app de Flutter (`integration_test/turno_completo_test.dart`, `-d flutter-tester`) recorre
+  un turno completo contra la API mientras el simulador mueve al resto de la flota.
+- APK: `cd apps/driver && flutter build apk --release --dart-define-from-file=config/staging.json`
+  (JDK 21 y SDK de Android en %LOCALAPPDATA%\Android\Sdk; manual en
+  docs/manuales/instalar-app-chofer.md).
 - CI: .github/workflows/ci.yml (Node con PostgreSQL+PostGIS en contenedor, y Flutter).
 
 ## Convenciones de la API (apps/api)
@@ -153,6 +159,9 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
 - Escaneo: `ScanController` valida primero en el celular con la lista del viaje
   (`/driver/trips/:id/manifest`, huellas SHA-256; se guarda en drift) y luego confirma el
   servidor. Sonidos en assets/sounds (`python infra/scripts/generar-sonidos-chofer.py`).
+- Avisos push: `PushController` (Firebase solo si config trae FIREBASE_*; sin eso
+  `DisabledPushService`). Versión: `UpdateController` + `mustUpdateProvider` (nunca bloquea a
+  mitad de un viaje). Tutorial por chofer (`LocalFlags` en la tabla snapshots).
 - Riverpod: un Notifier no puede leer un proveedor que depende de él (CircularDependencyError);
   separar el estado compartido en un proveedor sin dependencias (p. ej. `lastPositionProvider`).
 
@@ -174,3 +183,5 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
 - pandoc: %LOCALAPPDATA%\Pandoc\pandoc.exe (el script lo encuentra aunque no esté en PATH).
 - Blender 5.2: "C:\Program Files\Blender Foundation\Blender 5.2\blender.exe" (no está en PATH).
 - actionlint (winget) para validar workflows de GitHub Actions.
+- Android: JDK 21 (C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot) y SDK en
+  %LOCALAPPDATA%\Android\Sdk (cmdline-tools 13114758, platform 36), ya configurados en Flutter.

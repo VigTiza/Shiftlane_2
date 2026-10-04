@@ -11,4 +11,7 @@ abstract final class AppRoutes {
   static const trip = '/viaje';
   static const scan = '/escanear';
   static const arrival = '/llegada';
+  static const update = '/actualizar';
+  static const tutorial = '/tutorial';
+  static const help = '/ayuda';
 }

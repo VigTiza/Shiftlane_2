@@ -177,8 +177,8 @@ void main() {
       addTearDown(db.close);
       expect(await DriftOutboxRepository(db).pendingCount(), 1);
       final store = TripSnapshotStore(db);
-      await store.save([DriverTrip.fromJson(tripJson())]);
-      expect(await store.load(), hasLength(1));
+      await store.save('d1', [DriverTrip.fromJson(tripJson())]);
+      expect(await store.load('d1'), hasLength(1));
     });
 
     test('la copia guardada vence a las 24 horas', () async {
@@ -186,11 +186,12 @@ void main() {
       addTearDown(db.close);
       var now = DateTime(2026, 10, 5, 6);
       final store = TripSnapshotStore(db, clock: () => now);
-      expect(await store.load(), isNull);
-      await store.save([DriverTrip.fromJson(tripJson())]);
-      expect((await store.load())!.single.id, 'trip-1');
+      expect(await store.load('d1'), isNull);
+      await store.save('d1', [DriverTrip.fromJson(tripJson())]);
+      expect((await store.load('d1'))!.single.id, 'trip-1');
+      expect(await store.load('otro-chofer'), isNull);
       now = now.add(const Duration(hours: 25));
-      expect(await store.load(), isNull);
+      expect(await store.load('d1'), isNull);
     });
   });
 

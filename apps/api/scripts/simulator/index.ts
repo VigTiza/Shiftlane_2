@@ -13,6 +13,8 @@ import { api, setupFleet } from './setup.ts';
 if (existsSync('.env')) process.loadEnvFile('.env');
 
 const { values } = parseArgs({
+  // pnpm pasa el «--» tal cual: se ignora.
+  args: process.argv.slice(2).filter((arg) => arg !== '--'),
   options: {
     api: { type: 'string', default: 'http://localhost:3000' },
     units: { type: 'string', default: '30' },

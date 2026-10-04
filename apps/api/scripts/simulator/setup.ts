@@ -11,6 +11,7 @@ import type { UnitPlan } from './plan.ts';
 export interface SimUnit {
   plan: UnitPlan;
   tripId: string;
+  driverId: string;
   driverAuth: string;
   driverName: string;
   vehicleNumber: string;
@@ -229,6 +230,7 @@ export async function setupFleet(options: {
     units.push({
       plan,
       tripId: trip.id,
+      driverId: driver.id,
       driverAuth: `Bearer ${driverToken}`,
       driverName,
       vehicleNumber,

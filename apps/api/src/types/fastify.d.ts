@@ -14,6 +14,8 @@ import type { createPassengerAuthService } from '../modules/auth/passenger-servi
 import type { AuthService } from '../modules/auth/service.ts';
 import type { TokenService } from '../modules/auth/tokens.ts';
 import type { ScheduleService } from '../modules/schedule/service.ts';
+import type { PushSender } from '../lib/push.ts';
+import type { DriverPush } from '../modules/devices/driver-push.ts';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -35,6 +37,8 @@ declare module 'fastify' {
     events: DomainEvents;
     realtime: Realtime;
     alerts: AlertEngine;
+    push: PushSender;
+    driverPush: DriverPush;
     authServices: {
       auth: AuthService;
       drivers: DriverAuthService;

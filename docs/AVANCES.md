@@ -1,9 +1,9 @@
 # AVANCES — Shiftlane
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
-- Fase actual: F07 — App del chofer (Flutter)
-- Último prompt completado: F07-P06 Escaneo de pasajeros
-- Siguiente prompt: F07-P07 Notificaciones, actualización y pruebas integrales
+- Fase actual: F08 — Panel web de la transportista (F07 terminada)
+- Último prompt completado: F07-P07 Notificaciones, actualización y pruebas integrales
+- Siguiente prompt: F08-P01 Proyecto web y sistema de diseño (abrir localhost al usuario)
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -14,6 +14,8 @@
     (S3_TEST_ENDPOINT=http://localhost:9000) y Redis (REDIS_TEST_URL); poner
     REDIS_URL=redis://localhost:6379 en apps/api/.env y pasar las tareas programadas a BullMQ.
   - GitHub: origin = https://github.com/VigTiza/Shiftlane_2; revisar el CI tras cada push.
+  - PENDIENTE DEL USUARIO: proyecto de Firebase (avisos con la app cerrada). Ver
+    docs/manuales/instalar-app-chofer.md §2; el código ya está listo y apagado sin llaves.
   - Mensajes al chofer solo por tiempo real (sin guardar); avisos de solicitudes de la planta
     con el motor de notificaciones (F14-P01). Salas de tiempo real: se calculan al conectar.
   - Mapa del chofer: OpenStreetMap solo en desarrollo (SHIFTLANE_TILE_URL); producción
@@ -198,7 +200,47 @@
   resultado manda (si difiere, suena el suyo). Un «ya escaneado» local no se reenvía. Sonidos
   generados con un script (sin archivos de terceros) y vibraciones distintas por resultado.
 
+- 2026-10-03 Avisos push: token por celular en `devices` (no tabla nueva); se avisa a los
+  celulares con sesión vigente del chofer (un celular compartido avisa a quien entró). Envío
+  FCM HTTP v1 con JWT firmado a mano (sin SDK de Google). Sin FIREBASE_SERVICE_ACCOUNT o sin
+  FIREBASE_* en la app, los avisos llegan solo por tiempo real. Versión obligatoria nunca
+  bloquea a mitad de un viaje. «Tengo un problema» reutiliza el reporte de salud (/driver/health)
+  como diagnóstico para el despachador. Prueba integral en la computadora con
+  `-d flutter-tester` (sin emulador), orquestada desde Node con el simulador. APK de staging
+  firmado con la llave de depuración; producción con android/key.properties (no versionado).
+  Tutorial y copia local de viajes por chofer (celular compartido).
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F07-P07 Notificaciones, actualización y pruebas integrales
+- Hecho: API: POST /driver/push-token, GET /driver/app-version (pública), envío FCM v1 y
+  despachador de avisos (mensajes, cancelaciones, cambios de ruta; limpia tokens vencidos).
+  App: avisos con firebase_messaging (activos con FIREBASE_*), versión sugerida y obligatoria
+  con descarga del APK, tutorial de 6 pasos la primera vez de cada chofer, «Tengo un
+  problema» con soluciones y diagnóstico, nombre «Shiftlane Chofer», firma de producción
+  opcional. integration_test del turno completo + `pnpm e2e:chofer` (API local y simulador).
+  APK de staging y manual de instalación. Se corrigió que la lista de viajes no se recargaba
+  al cambiar de chofer y que la copia local no distinguía choferes.
+- Archivos principales: apps/api/src/lib/push.ts, src/modules/devices/{driver-push,routes,
+  service,schemas}.ts, prisma/migrations/*_push_tokens, scripts/e2e/driver-shift.ts;
+  apps/driver/lib/application/{push,update,tutorial}/*, lib/data/{push,app_version}/*,
+  lib/data/local/local_flags.dart, lib/presentation/screens/{help,update,tutorial}/*,
+  integration_test/turno_completo_test.dart, android/app/build.gradle.kts,
+  docs/manuales/instalar-app-chofer.md.
+- Pruebas agregadas / resultado: API 7 (FCM con JWT verificado y token en caché, tokens
+  vencidos, cuenta de servicio, versión, mensaje al celular con sesión, cancelación, cierre de
+  sesión, token inválido); Flutter 10 (versiones, Firebase opcional, bloqueo y descarga, no
+  bloquea en viaje, sugerida, sin señal, tutorial, avisos, «Tengo un problema»); 97 en
+  Flutter y 372 en la API. Prueba integral: turno completo en 17 s con 3 unidades simuladas.
+- Problemas encontrados y cómo se resolvieron: la migración falló porque el trigger de
+  auditoría ya existía (se borra antes de volver a activarlo); pnpm pasa «--» a los scripts
+  (se ignora); el sdkmanager nuevo de Android no conectaba (se usó cmdline-tools 13114758);
+  permission_handler_android 14 exige la API 37, que el SDK ya publica como «android-37.0» y
+  AGP 9.1 no reconoce: se subió a AGP 9.3.3 + Gradle 9.5 y compileSdk 37; la compilación
+  incremental de Kotlin falla con el proyecto en E: y la caché en C: (se desactivó). APK de
+  staging: 77.8 MB (todas las arquitecturas).
+- Pendiente para después: proyecto de Firebase del usuario; probar el APK en celulares
+  reales (permisos por marca, servicio en primer plano, sonidos).
+
 ### 2026-10-03 — F07-P06 Escaneo de pasajeros
 - Hecho: lector de QR y códigos de barras de gafetes (mobile_scanner con formatos comunes);
   lista de la planta descargada al abrir el inicio y guardada en drift; validación local con

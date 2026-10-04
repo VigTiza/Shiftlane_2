@@ -234,6 +234,8 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 | GET | /alert-rules | `settings.manage` o `alerts.manage` | Reglas de la empresa con valores por omisión |
 | PUT | /alert-rules/:type | `settings.manage` | Activa, gravedad, umbrales, escalamiento y aviso a la planta |
 | POST | /driver/health | chofer | Reportes de salud del celular; responde qué impide iniciar un viaje |
+| POST | /driver/push-token | chofer | Token de Firebase del celular (`null` lo quita): mensajes del despachador, cancelaciones y cambios de ruta con la app cerrada |
+| GET | /driver/app-version | pública | Versión mínima (obligatoria), última y enlace de descarga del APK |
 | GET | /devices/health | `monitoring.view`, `dispatch.operate` o `alerts.manage` | Inventario de celulares con su último reporte |
 | GET | /devices/:id/health?limit= | igual | Historial de salud de un celular |
 | GET | /trips/:id/diagnosis | igual | Causa probable de que la unidad dejó de reportar |

@@ -5,6 +5,8 @@ import type { App } from '../../src/app.ts';
 import { loadEnv } from '../../src/config/env.ts';
 import { generateCredentialKey } from '../../src/lib/credential-signer.ts';
 import { createMemoryMailer } from '../../src/lib/mailer.ts';
+import { createMemoryPushSender } from '../../src/lib/push.ts';
+import type { PushSender } from '../../src/lib/push.ts';
 import type { Mailer } from '../../src/lib/mailer.ts';
 import type { RoutingProvider } from '../../src/lib/routing.ts';
 import { createMemoryStorage } from '../../src/lib/storage.ts';
@@ -25,6 +27,8 @@ export interface TestAppOptions {
   mailer?: Mailer;
   /** Servicio de rutas (por omisión, línea recta). */
   routing?: RoutingProvider;
+  /** Avisos al celular; por omisión en memoria (app.push.sent). */
+  push?: PushSender;
 }
 
 export async function buildTestApp({
@@ -32,6 +36,7 @@ export async function buildTestApp({
   beforeReady,
   mailer = createMemoryMailer(),
   routing,
+  push = createMemoryPushSender(),
 }: TestAppOptions = {}): Promise<App> {
   const storage = createMemoryStorage();
   const app = await buildApp({
@@ -46,6 +51,7 @@ export async function buildTestApp({
     }),
     mailer,
     storage,
+    push,
     ...(routing ? { routing } : {}),
   });
   beforeReady?.(app);

@@ -20,6 +20,7 @@
     "db:migrate": "pnpm --filter @shiftlane/api run db:migrate",
     "db:seed": "pnpm --filter @shiftlane/api run db:seed",
     "simulate": "pnpm --filter @shiftlane/api run simulate",
+    "e2e:chofer": "pnpm --filter @shiftlane/api run e2e:chofer",
     "docs:referencia": "python infra/scripts/docx-a-markdown.py",
     "docs:verificar": "python infra/scripts/docx-a-markdown.py --verificar",
     "docs:permisos": "node packages/shared/scripts/actualizar-matriz.ts"

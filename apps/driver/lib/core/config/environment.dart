@@ -2,12 +2,29 @@
 /// `flutter run --dart-define-from-file=config/dev.json`.
 enum AppEnvironment { dev, staging, prod }
 
+/// Proyecto de Firebase para avisos con la app cerrada (valores públicos de la app de Android
+/// en la consola de Firebase; no son secretos).
+class FirebaseSettings {
+  const FirebaseSettings({
+    required this.apiKey,
+    required this.appId,
+    required this.messagingSenderId,
+    required this.projectId,
+  });
+
+  final String apiKey;
+  final String appId;
+  final String messagingSenderId;
+  final String projectId;
+}
+
 class AppConfig {
   const AppConfig({
     required this.environment,
     required this.apiBaseUrl,
     required this.locationIntervalSeconds,
     this.tileUrlTemplate = defaultTileUrl,
+    this.firebase,
   });
 
   /// Mosaicos del mapa. En producción usar un proveedor que permita guardarlos en el
@@ -30,6 +47,9 @@ class AppConfig {
 
   final String tileUrlTemplate;
 
+  /// null: sin avisos push (los avisos llegan por tiempo real con la app abierta).
+  final FirebaseSettings? firebase;
+
   bool get isProduction => environment == AppEnvironment.prod;
 
   /// Nombre del ambiente para mostrar (prod no muestra nada).
@@ -45,6 +65,10 @@ class AppConfig {
     String apiUrl = '',
     String locationInterval = '',
     String tileUrl = '',
+    String firebaseApiKey = '',
+    String firebaseAppId = '',
+    String firebaseSenderId = '',
+    String firebaseProjectId = '',
   }) {
     final env = AppEnvironment.values.where((e) => e.name == environment);
     if (env.isEmpty) {
@@ -69,6 +93,20 @@ class AppConfig {
       apiBaseUrl: parsed,
       locationIntervalSeconds: interval.clamp(10, 15),
       tileUrlTemplate: tileUrl.isNotEmpty ? tileUrl : defaultTileUrl,
+      firebase:
+          [
+            firebaseApiKey,
+            firebaseAppId,
+            firebaseSenderId,
+            firebaseProjectId,
+          ].every((v) => v.isNotEmpty)
+          ? FirebaseSettings(
+              apiKey: firebaseApiKey,
+              appId: firebaseAppId,
+              messagingSenderId: firebaseSenderId,
+              projectId: firebaseProjectId,
+            )
+          : null,
     );
   }
 
@@ -83,5 +121,9 @@ class AppConfig {
       'SHIFTLANE_LOCATION_INTERVAL',
     ),
     tileUrl: const String.fromEnvironment('SHIFTLANE_TILE_URL'),
+    firebaseApiKey: const String.fromEnvironment('FIREBASE_API_KEY'),
+    firebaseAppId: const String.fromEnvironment('FIREBASE_APP_ID'),
+    firebaseSenderId: const String.fromEnvironment('FIREBASE_SENDER_ID'),
+    firebaseProjectId: const String.fromEnvironment('FIREBASE_PROJECT_ID'),
   );
 }
