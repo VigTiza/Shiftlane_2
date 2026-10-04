@@ -373,3 +373,14 @@ credencial, pasajero, empresa y un valor aleatorio que cambia al reemitirla.
 
 Las cargas de Excel validan cada fila y devuelven `{ totalRows, created, updated, errors: [{ row, column, message }], applied }`.
 Si hay un solo error no se guarda nada.
+
+## Empresa y configuración inicial
+
+| Método | Ruta | Permiso | Qué hace |
+| --- | --- | --- | --- |
+| GET | /company | dashboard.view, settings.manage o users.read | Nombre comercial, razón social, RFC y si tiene logo |
+| PUT | /company | settings.manage | Actualiza nombre, razón social y RFC |
+| POST, GET, DELETE | /company/logo | settings.manage (ver: cualquiera de los de arriba) | Logo de la empresa (JPG, PNG o WebP) |
+| GET | /onboarding | dashboard.view, settings.manage o users.read | Avance de los 8 pasos del asistente, calculado con los datos de la cuenta |
+| PUT | /onboarding/steps/:step | settings.manage | Marca o desmarca un paso a mano |
+| PUT | /onboarding/dismissed | settings.manage | Oculta o vuelve a mostrar el asistente en el inicio |

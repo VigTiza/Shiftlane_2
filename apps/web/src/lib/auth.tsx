@@ -1,4 +1,4 @@
-import { effectivePermissions } from '@shiftlane/shared';
+import { effectivePermissions, isPermission } from '@shiftlane/shared';
 import type { Permission, Scope } from '@shiftlane/shared';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -106,6 +106,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
     }
     const scope = scopeOf(me);
+    // Permisos efectivos (roles y excepciones por usuario); sin ellos, los de sus roles.
+    const granted = await api<{ permissions: string[] }>('/me/permissions')
+      .then((result) => result.permissions.filter(isPermission))
+      .catch(() => effectivePermissions(scope, me.roles));
     const session: SessionUser = {
       id: me.id,
       fullName: me.fullName,
@@ -115,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       roles: me.roles,
       twoFactorEnabled: me.twoFactorEnabled,
       scope,
-      permissions: effectivePermissions(scope, me.roles),
+      permissions: granted,
     };
     setUser(session);
     setStatus('authenticated');

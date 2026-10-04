@@ -13,3 +13,10 @@ export function sendFile(
     .header('cache-control', 'private, no-store')
     .send(file.body);
 }
+
+/** Tipo de una imagen guardada según su extensión (fotos y logos). */
+export function contentTypeOf(key: string): string {
+  if (key.endsWith('.png')) return 'image/png';
+  if (key.endsWith('.webp')) return 'image/webp';
+  return 'image/jpeg';
+}

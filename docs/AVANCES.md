@@ -2,9 +2,9 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F08 — Panel web de la transportista
-- Último prompt completado: F08-P01 Proyecto web y sistema de diseño
-- Siguiente prompt: F08-P02 Asistente de configuración inicial y catálogos (localhost abierto:
-  `pnpm --filter @shiftlane/web dev`, http://localhost:5173)
+- Último prompt completado: F08-P02 Asistente de configuración inicial y catálogos
+- Siguiente prompt: F08-P03 Editor de rutas (localhost abierto: `pnpm --filter @shiftlane/web
+  dev`, http://localhost:5173)
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -220,7 +220,39 @@
   abre el acceso con el correo sugerido. El menú se calcula con los roles de /auth/me (sin
   permisos individuales todavía; la API autoriza de todos modos).
 
+- 2026-10-04 Asistente de configuración: el avance de cada paso sale de los datos de la cuenta
+  (unidades y choferes, plantas atendidas, rutas, invitaciones o pasajeros, celulares, viajes
+  terminados) y además se puede marcar a mano; se guarda en `tenants.onboarding`. Los videos
+  de un minuto aún no existen: cada paso muestra sus puntos clave hasta que se graben
+  (constante VIDEOS en apps/web/src/pages/onboarding.tsx). Pasajeros en el panel de la
+  transportista es de consulta: la carga la hace la planta (permiso plant.employees).
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-04 — F08-P02 Asistente de configuración inicial y catálogos
+- Hecho: API «empresa» (datos fiscales, logo, avance del asistente). Panel: asistente de 8
+  pasos con barra de avance, video (por grabar) y acciones en cada paso (datos y logo, reglas
+  de alerta y turnos, importar flota, cliente con planta, invitación a la planta, celulares y
+  viaje de prueba); tarjeta de avance en el inicio; catálogos de unidades (foto, importar y
+  exportar Excel), choferes (QR de alta, restablecer PIN, importar y exportar), clientes y
+  plantas (puertas con QR de llegada para imprimir, cambiar código, contactos, invitaciones),
+  contratos con tarifas y penalizaciones, y pasajeros (consulta con búsqueda y paginación en
+  el servidor). Permisos efectivos desde /me/permissions.
+- Archivos principales: apps/api/src/modules/company/*, prisma/migrations/*_company,
+  scripts/e2e/web-account.ts; apps/web/src/pages/{onboarding,catalogs/*}.tsx,
+  src/components/{catalog,ui/fields}.tsx, src/lib/{resources,api}.ts, e2e/*,
+  playwright.config.ts.
+- Pruebas agregadas / resultado: API 4 (empresa, logo, permisos, aislamiento, avance y marca
+  manual); Vitest 10 (unidades con validación, edición y vista previa de importación;
+  choferes con QR y PIN; cliente con planta; puerta con QR; pasajeros con búsqueda del
+  servidor; asistente; tarjeta del inicio; contrato con tarifa por ruta); Playwright 6 flujos
+  contra la API real. Totales: API 376, panel 36, Flutter 97.
+- Problemas encontrados y cómo se resolvieron: la API actualiza con PATCH y sube fotos con PUT
+  (se ajustó el cliente); al corregir un Excel con el mismo nombre el navegador no avisaba
+  del cambio (se limpia el selector tras leerlo); Playwright choca con el límite de accesos de
+  la API (se entra una vez y se comparte la página); el QR ahora es una imagen accesible.
+- Pendiente para después: grabar los 8 videos del asistente; mapa para ubicar plantas y
+  puertas (llega con el editor de rutas, F08-P03); expedientes de documentos (F08-P06).
+
 ### 2026-10-03 — F08-P01 Proyecto web y sistema de diseño
 - Hecho: apps/web con Vite 8, React 19, Tailwind 4, Radix, React Router 8, TanStack Query y
   Table, React Hook Form + Zod; sistema de diseño (tokens claro/oscuro, tipografía, botones,

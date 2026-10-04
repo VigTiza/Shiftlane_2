@@ -13,8 +13,16 @@ import { ThemeProvider } from '@/lib/theme';
 import { navigationFor } from '@/navigation';
 import { LoginPage } from '@/pages/auth/login';
 import { ForgotPasswordPage, ResetPasswordPage } from '@/pages/auth/password';
+import { ClientDetailPage } from '@/pages/catalogs/client-detail';
+import { ClientsPage } from '@/pages/catalogs/clients';
+import { ContractDetailPage } from '@/pages/catalogs/contract-detail';
+import { ContractsPage } from '@/pages/catalogs/contracts';
+import { DriversPage } from '@/pages/catalogs/drivers';
+import { PassengersPage } from '@/pages/catalogs/passengers';
+import { VehiclesPage } from '@/pages/catalogs/vehicles';
 import { DesignSystemPage } from '@/pages/design-system';
 import { HomePage } from '@/pages/home';
+import { OnboardingPage } from '@/pages/onboarding';
 import { ComingSoonPage, NotFoundPage } from '@/pages/placeholders';
 
 /** Pantalla mientras se revisa si la sesión sigue vigente. */
@@ -81,17 +89,20 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, element: <Home /> },
           { path: 'sistema-de-diseno', element: <DesignSystemPage /> },
+          { path: 'unidades', element: <VehiclesPage /> },
+          { path: 'choferes', element: <DriversPage /> },
+          { path: 'clientes', element: <ClientsPage /> },
+          { path: 'clientes/:id', element: <ClientDetailPage /> },
+          { path: 'contratos', element: <ContractsPage /> },
+          { path: 'contratos/:id', element: <ContractDetailPage /> },
+          { path: 'pasajeros', element: <PassengersPage /> },
+          { path: 'configuracion-inicial', element: <OnboardingPage /> },
           ...[
             'monitoreo',
             'alertas',
             'programacion',
             'solicitudes',
             'rutas',
-            'unidades',
-            'choferes',
-            'clientes',
-            'contratos',
-            'pasajeros',
             'celulares',
             'cumplimiento',
             'mantenimiento',

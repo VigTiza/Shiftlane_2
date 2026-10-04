@@ -27,14 +27,18 @@ enum TenantStatus {
 
 /// Empresa transportista (cuenta del SaaS).
 model Tenant {
-  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name      String
-  legalName String?      @map("legal_name")
-  rfc       String?
-  status    TenantStatus @default(active)
-  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt DateTime?    @map("deleted_at") @db.Timestamptz(3)
+  id         String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  legalName  String?      @map("legal_name")
+  rfc        String?
+  /// Logo de la empresa (llave en el almacenamiento de archivos).
+  logoKey    String?      @map("logo_key")
+  /// Avance del asistente de configuración: pasos marcados a mano y si se ocultó.
+  onboarding Json         @default("{}")
+  status     TenantStatus @default(active)
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt  DateTime?    @map("deleted_at") @db.Timestamptz(3)
 
   users               User[]
   permissionOverrides UserPermissionOverride[]

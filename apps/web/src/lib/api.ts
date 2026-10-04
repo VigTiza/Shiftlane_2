@@ -101,6 +101,80 @@ export function refreshSession(): Promise<string | null> {
   return refreshing;
 }
 
+/** Petición con renovación de sesión ante un 401 (JSON, archivo o descarga). */
+async function withSession(run: (token: string | null) => Promise<Response>) {
+  let response = await run(accessToken);
+  if (response.status === 401) {
+    const token = await refreshSession();
+    if (token) {
+      response = await run(token);
+    } else {
+      accessToken = null;
+      onSessionExpired?.();
+    }
+  }
+  return response;
+}
+
+function authHeader(token: string | null): Record<string, string> {
+  return token ? { authorization: `Bearer ${token}` } : {};
+}
+
+/** Sube un archivo (Excel, foto o documento) como multipart. */
+export async function apiUpload<T>(
+  path: string,
+  file: File | Blob,
+  options: { fileName?: string; method?: 'POST' | 'PUT' } = {},
+): Promise<T> {
+  const response = await withSession(async (token) => {
+    const form = new FormData();
+    form.append('file', file, options.fileName ?? (file instanceof File ? file.name : 'archivo'));
+    try {
+      return await fetch(`${BASE_URL}${path}`, {
+        method: options.method ?? 'POST',
+        credentials: 'include',
+        headers: authHeader(token),
+        body: form,
+      });
+    } catch {
+      throw new ApiError(0, 'NETWORK', 'No hay conexión con el servidor. Revisa tu internet.');
+    }
+  });
+  return parse<T>(response);
+}
+
+/** Descarga un archivo de la API (plantillas, exportaciones) con la sesión actual. */
+export async function apiBlob(path: string): Promise<{ blob: Blob; fileName: string | null }> {
+  const response = await withSession(async (token) => {
+    try {
+      return await fetch(`${BASE_URL}${path}`, {
+        credentials: 'include',
+        headers: authHeader(token),
+      });
+    } catch {
+      throw new ApiError(0, 'NETWORK', 'No hay conexión con el servidor. Revisa tu internet.');
+    }
+  });
+  if (!response.ok) await parse(response);
+  const disposition = response.headers.get('content-disposition') ?? '';
+  const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition);
+  const fileName = match ? decodeURIComponent(match[1] ?? match[2] ?? '') : null;
+  return { blob: await response.blob(), fileName };
+}
+
+/** Descarga y guarda un archivo con el nombre que manda la API (o el indicado). */
+export async function downloadFile(path: string, fallbackName: string) {
+  const { blob, fileName } = await apiBlob(path);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName ?? fallbackName;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
   let response = await send(path, options, options.anonymous ? null : accessToken);
   if (response.status === 401 && !options.anonymous) {

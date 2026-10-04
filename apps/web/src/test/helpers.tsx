@@ -5,7 +5,7 @@ import { vi } from 'vitest';
 
 import { Providers, routes } from '@/app';
 
-type Handler = (body: unknown) => { status?: number; body?: unknown } | undefined;
+type Handler = (body: unknown, url: URL) => { status?: number; body?: unknown } | undefined;
 
 /**
  * API simulada: responde por «MÉTODO /ruta». Lo que no está definido responde 404 con el
@@ -18,11 +18,16 @@ export function fakeApi(handlers: Record<string, Handler>) {
     const url = new URL(raw, 'http://localhost');
     const path = url.pathname.replace(/^\/api/, '');
     const method = init?.method ?? 'GET';
-    const body = typeof init?.body === 'string' ? (JSON.parse(init.body) as unknown) : undefined;
+    const body =
+      typeof init?.body === 'string'
+        ? (JSON.parse(init.body) as unknown)
+        : init?.body instanceof FormData
+          ? init.body
+          : undefined;
     const headers = (init?.headers ?? {}) as Record<string, string>;
     calls.push({ method, path, body, auth: headers.authorization ?? null });
     const handler = handlers[`${method} ${path}`];
-    const result = handler?.(body) ?? {
+    const result = handler?.(body, url) ?? {
       status: 404,
       body: { error: { code: 'NOT_FOUND', message: 'No se encontró.' } },
     };
@@ -55,6 +60,19 @@ export const dispatcher = {
   email: 'luis@transportes.mx',
   roles: ['dispatcher'],
 };
+
+/** Sesión iniciada como dueño (con permisos de la API). */
+export function signedInHandlers(me: Record<string, unknown> = owner): Record<string, Handler> {
+  return {
+    'POST /auth/refresh': () => ({ body: { accessToken: 'token-de-acceso', expiresIn: 900 } }),
+    'GET /auth/me': () => ({ body: me }),
+    'POST /auth/logout': () => ({ status: 204 }),
+  };
+}
+
+export function page<T>(items: T[]) {
+  return { items, total: items.length, page: 1, pageSize: 100 };
+}
 
 export const unauthorized = {
   status: 401,

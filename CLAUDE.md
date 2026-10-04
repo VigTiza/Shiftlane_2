@@ -86,6 +86,9 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
 - `pnpm e2e:chofer -- --units 4 --minutes 3` — prueba integral: con la API local en marcha,
   la app de Flutter (`integration_test/turno_completo_test.dart`, `-d flutter-tester`) recorre
   un turno completo contra la API mientras el simulador mueve al resto de la flota.
+- `pnpm e2e:web` — pruebas de flujos del panel con Playwright (apps/web/e2e) contra la API
+  local en marcha: crean una transportista nueva (apps/api/scripts/e2e/web-account.ts) y
+  entran una sola vez (la API limita los intentos de acceso).
 - APK: `cd apps/driver && flutter build apk --release --dart-define-from-file=config/staging.json`
   (JDK 21 y SDK de Android en %LOCALAPPDATA%\Android\Sdk; manual en
   docs/manuales/instalar-app-chofer.md).
@@ -180,6 +183,10 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
 - Sesión: src/lib/auth.tsx (token en memoria, renovación con cookie en src/lib/api.ts,
   permisos con `effectivePermissions` de los roles). Menú por ámbito y permiso en
   src/navigation.ts. Pantallas nuevas: PageHeader + DataTable/EmptyState/LoadingRows.
+- Catálogos: lista con `DataTable` (o paginación del servidor si son miles, como Pasajeros),
+  alta y edición en diálogo con `TextField`/`SelectField` (src/components/ui/fields.tsx),
+  importación con `ImportDialog` (vista previa con dryRun y luego aplicar), QR con `QrCard`.
+  La API actualiza con PATCH y sube fotos con PUT; textos opcionales vacíos van como ''.
 - Pruebas: Vitest + Testing Library (jsdom); `fakeApi` y `renderApp` en src/test/helpers.tsx.
 
 ## Configuración compartida

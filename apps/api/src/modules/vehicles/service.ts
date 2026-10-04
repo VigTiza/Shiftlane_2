@@ -4,6 +4,7 @@ import type { DbTransaction } from '../../lib/db.ts';
 import { ConflictError, NotFoundError } from '../../lib/errors.ts';
 import type { ImportReport, ParsedRow } from '../../lib/excel.ts';
 import { findDuplicates } from '../../lib/excel.ts';
+import { contentTypeOf } from '../../lib/files.ts';
 import { fromDbDate, toDbDateOrNull } from '../../lib/http-schemas.ts';
 import { isUniqueViolation } from '../../lib/prisma-errors.ts';
 import type { ObjectStorage } from '../../lib/storage.ts';
@@ -370,12 +371,6 @@ export function createVehiclesService(deps: { storage: ObjectStorage; timeZone: 
       return { ...report, applied: true };
     },
   };
-}
-
-function contentTypeOf(key: string): string {
-  if (key.endsWith('.png')) return 'image/png';
-  if (key.endsWith('.webp')) return 'image/webp';
-  return 'image/jpeg';
 }
 
 export type VehiclesService = ReturnType<typeof createVehiclesService>;

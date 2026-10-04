@@ -19,6 +19,7 @@ import {
   PaletteIcon,
   PathIcon,
   ReceiptIcon,
+  RocketLaunchIcon,
   ShieldCheckIcon,
   TrayIcon,
   UsersIcon,
@@ -127,6 +128,13 @@ const carrier: NavGroup[] = [
   {
     label: 'Administración',
     items: [
+      {
+        label: 'Configuración inicial',
+        path: '/configuracion-inicial',
+        icon: RocketLaunchIcon,
+        permissions: ['settings.manage'],
+        keywords: 'asistente empezar pasos',
+      },
       {
         label: 'Cumplimiento',
         path: '/cumplimiento',

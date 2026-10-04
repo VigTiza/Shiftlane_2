@@ -67,6 +67,7 @@ import { routeRoutes } from './modules/routes/routes.ts';
 import { syncRoutes } from './modules/sync/routes.ts';
 import { tripRoutes } from './modules/trips/routes.ts';
 import { createAlertEngine } from './modules/alerts/engine.ts';
+import { companyRoutes } from './modules/company/routes.ts';
 import { createDriverPush } from './modules/devices/driver-push.ts';
 import { alertRoutes } from './modules/alerts/routes.ts';
 import { deviceRoutes } from './modules/devices/routes.ts';
@@ -365,6 +366,7 @@ export async function buildApp({
   await app.register(syncRoutes);
   await app.register(alertRoutes);
   await app.register(deviceRoutes);
+  await app.register(companyRoutes);
 
   return app;
 }
