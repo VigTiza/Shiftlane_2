@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { todayIn } from '@shiftlane/shared';
 
 import type { DbClient, DbTransaction } from '../../lib/db.ts';
@@ -35,6 +37,13 @@ export const DEFAULT_CHECKLIST: ChecklistItem[] = [
 
 /** Distancia máxima para asignar un escaneo a una parada. */
 const SCAN_STOP_MAX_METERS = 500;
+
+/** «Ana Ruiz López» → «Ana R.» (lo mínimo para que el chofer confirme quién sube). */
+function shortName(fullName: string) {
+  const [first = '', last] = fullName.trim().split(/\s+/);
+  return last ? `${first} ${last[0]!.toUpperCase()}.` : first;
+}
+
 /** Tolerancia para la hora adelantada del celular (la sincronización la corrige en F05-P02). */
 const CLOCK_TOLERANCE_MS = 5 * 60_000;
 export const GATE_QR_PREFIX = 'shiftlane-puerta://';
@@ -222,6 +231,49 @@ export function createDriverTripsService(deps: {
 
   return {
     templateFor,
+
+    /** Lista de la planta para que la app valide escaneos sin señal (ver tripManifest). */
+    async manifest(tx: DbTransaction, session: DriverSession, tripId: string) {
+      const trip = await driverTrip(tx, session, tripId);
+      const [passengers, routeMembers, boarded] = [
+        await tx.passenger.findMany({
+          where: { plantId: trip.plantId, status: 'active', deletedAt: null },
+          select: {
+            id: true,
+            fullName: true,
+            employeeNumber: true,
+            credentials: { where: { revokedAt: null }, select: { value: true } },
+          },
+          orderBy: { employeeNumber: 'asc' },
+        }),
+        trip.routeId
+          ? await tx.routePassenger.findMany({
+              where: { routeId: trip.routeId, deletedAt: null },
+              select: { passengerId: true },
+            })
+          : null,
+        await tx.boarding.findMany({
+          where: { tripId, passengerId: { not: null } },
+          select: { passengerId: true },
+        }),
+      ];
+      const onRoute = routeMembers ? new Set(routeMembers.map((r) => r.passengerId)) : null;
+      return {
+        tripId,
+        plantId: trip.plantId,
+        generatedAt: new Date(),
+        passengers: passengers.map((p) => ({
+          id: p.id,
+          name: shortName(p.fullName),
+          employeeNumber: p.employeeNumber,
+          onRoute: onRoute ? onRoute.has(p.id) : true,
+          credentialHashes: p.credentials.map((c) =>
+            createHash('sha256').update(c.value).digest('hex'),
+          ),
+        })),
+        boarded: boarded.map((b) => b.passengerId!),
+      };
+    },
 
     /** Viajes del día del chofer: el que está en curso y el siguiente siempre arriba. */
     async todayTrips(tx: DbTransaction, session: DriverSession, date?: string) {

@@ -26,6 +26,7 @@ import {
   checklistBody,
   checklistResponse,
   checklistTemplate,
+  tripManifest,
   driverTrips,
   driverTripsQuery,
   exceptionBody,
@@ -114,6 +115,21 @@ export const tripRoutes: FastifyPluginCallbackZod = (app, _options, done) => {
     },
     (request) =>
       driverAction(request, (tx) => driver.todayTrips(tx, sessionOf(request), request.query.date)),
+  );
+
+  app.get(
+    '/driver/trips/:id/manifest',
+    {
+      onRequest: driverOnly,
+      schema: {
+        tags: DRIVER_TAGS,
+        summary: 'Pasajeros de la planta para validar escaneos sin señal',
+        params: idParams,
+        response: { 200: tripManifest },
+      },
+    },
+    (request) =>
+      driverAction(request, (tx) => driver.manifest(tx, sessionOf(request), request.params.id)),
   );
 
   app.get(

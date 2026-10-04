@@ -1,3 +1,4 @@
+import { todayIn } from '@shiftlane/shared';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -24,8 +25,10 @@ async function tokenFor(email: string): Promise<string> {
   return `Bearer ${response.body.accessToken as string}`;
 }
 
+/** Fecha de negocio a N días de hoy, en la zona horaria de la empresa (como el servidor). */
 function isoDate(daysFromToday: number): string {
-  return new Date(Date.now() + daysFromToday * 86_400_000).toISOString().slice(0, 10);
+  const today = Date.parse(`${todayIn(app.config.DEFAULT_TIME_ZONE)}T12:00:00Z`);
+  return new Date(today + daysFromToday * 86_400_000).toISOString().slice(0, 10);
 }
 
 function createDriver(body: Record<string, unknown> = {}, auth = ownerAuth) {

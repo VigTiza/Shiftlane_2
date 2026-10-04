@@ -215,6 +215,7 @@ ni borrar desde la API. Se consulta con `GET /audit-log` (permiso `audit.read`).
 
 | GET | /driver/trips?date= | chofer | Viajes del día (en curso y siguiente arriba) con paradas, paradas ya visitadas (`stopsArrived`), unidad, pasajeros esperados y checklist |
 | GET | /driver/checklist-template | chofer | Puntos del checklist de la unidad |
+| GET | /driver/trips/:id/manifest | chofer | Lista para escanear sin señal: pasajeros activos de la planta (nombre corto, número de empleado, si son de la ruta y huellas SHA-256 de sus credenciales vigentes) y los ya escaneados |
 | POST | /driver/trips/:id/photos?kind= | chofer | Foto del viaje (checklist, incident, evidence; JPG, PNG o WebP) |
 | POST | /driver/trips/:id/checklist | chofer | Checklist de la unidad (vale para todos los viajes del día de esa unidad) |
 | POST | /driver/trips/:id/start, /stops, /gate, /finish | chofer | Iniciar, llegar a parada, QR de la puerta (`shiftlane-puerta://…`), terminar |

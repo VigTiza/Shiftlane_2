@@ -8,8 +8,10 @@ environment:
 
 dependencies:
   app_settings: ^9.0.0
+  audioplayers: ^6.8.1
   battery_plus: ^7.1.2
   connectivity_plus: ^7.3.1
+  crypto: ^3.0.7
   device_info_plus: ^13.3.0
   dio: ^5.11.1
   drift: ^2.35.1
@@ -43,3 +45,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    # Sonidos del escaneo (infra/scripts/generar-sonidos-chofer.py).
+    - assets/sounds/

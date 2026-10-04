@@ -178,6 +178,30 @@ export const driverTrips = z.object({
   ),
 });
 
+/**
+ * Lista para validar escaneos sin señal: pasajeros activos de la planta del viaje con la
+ * huella SHA-256 (hex) de sus credenciales vigentes (valor aleatorio de la credencial QR de
+ * Shiftlane o código del gafete). Datos mínimos: nombre corto y número de empleado.
+ */
+export const tripManifest = z.object({
+  tripId: z.uuid(),
+  plantId: z.uuid(),
+  generatedAt: z.date(),
+  passengers: z.array(
+    z.object({
+      id: z.uuid(),
+      /** Nombre y la inicial del primer apellido («Ana R.»). */
+      name: z.string(),
+      employeeNumber: z.string(),
+      /** Es de la ruta del viaje (en viajes extra sin ruta, todos los de la planta). */
+      onRoute: z.boolean(),
+      credentialHashes: z.array(z.string()),
+    }),
+  ),
+  /** Pasajeros ya escaneados en este viaje. */
+  boarded: z.array(z.uuid()),
+});
+
 export const exceptionBody = z.object({
   reason: z.string().trim().min(3, 'Escribe por qué autorizas la salida.').max(300),
 });

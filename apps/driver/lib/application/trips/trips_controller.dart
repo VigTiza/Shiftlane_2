@@ -147,21 +147,31 @@ class TripsController extends AsyncNotifier<List<DriverTrip>> {
   }
 
   /// Escaneo de un pasajero (credencial, gafete o número de empleado).
+  /// [countsOnboard]: lo que dijo la validación en el celular (sin señal se cuenta a bordo
+  /// solo si el pasajero sube; sin validación local, se cuenta).
   Future<ActionResult> scan(
     String tripId, {
     String? code,
+    String? codeType,
     String? employeeNumber,
+    bool? countsOnboard,
   }) async {
     final result = await _perform(
       'scan',
       tripId: tripId,
-      data: {'code': ?code, 'employeeNumber': ?employeeNumber},
+      data: {
+        'code': ?code,
+        'codeType': ?codeType,
+        'employeeNumber': ?employeeNumber,
+      },
     );
     final onboard = result.result?['onboard'] as int?;
     final trip = _byId(tripId);
     if (onboard != null) {
       _replace(trip.copyWith(onboard: onboard));
-    } else if (result.status == SyncStatus.queued) {
+    } else if ((result.status == SyncStatus.queued ||
+            result.status == SyncStatus.retry) &&
+        (countsOnboard ?? true)) {
       // Sin señal: se cuenta en el celular hasta que el servidor confirme.
       _replace(trip.copyWith(onboard: trip.onboard + 1));
     }

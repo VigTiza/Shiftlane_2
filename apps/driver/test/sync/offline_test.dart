@@ -501,7 +501,13 @@ void main() {
   ) async {
     _tallScreen(tester);
     final dir = Directory.systemTemp.createTempSync('shiftlane-');
-    addTearDown(() => dir.deleteSync(recursive: true));
+    addTearDown(() {
+      try {
+        dir.deleteSync(recursive: true);
+      } on FileSystemException {
+        // Windows puede tardar en soltar el archivo; es temporal.
+      }
+    });
     final file = File('${dir.path}/shiftlane.sqlite');
     final store = _signedIn();
     final trips = FakeTripRepository(trips: [tripJson(status: 'in_progress')]);
@@ -509,6 +515,7 @@ void main() {
 
     // Primer arranque con señal; a mitad del viaje se pierde.
     final firstDb = AppDatabase(NativeDatabase(file));
+    addTearDown(firstDb.close);
     final firstGps = FakeLocationTracker();
     final firstNet = FakeConnectivity();
     await pumpApp(

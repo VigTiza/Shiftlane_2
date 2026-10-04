@@ -52,3 +52,23 @@ StopNotice? stopNoticeFor(
   if (meters > approachMeters) return null;
   return StopNotice(stop: stop, meters: meters);
 }
+
+/// Parada más cercana a la posición (hasta [maxMeters]): el escaneo la muestra como la parada
+/// donde subió el pasajero. El servidor la decide con la misma regla; el chofer nunca la elige.
+TripStop? nearestStop(
+  DriverTrip trip,
+  ({double lat, double lng})? position, {
+  int maxMeters = 500,
+}) {
+  if (position == null) return null;
+  TripStop? best;
+  var bestMeters = double.infinity;
+  for (final stop in trip.stops) {
+    final meters = distanceMeters(position, (lat: stop.lat, lng: stop.lng));
+    if (meters < bestMeters) {
+      best = stop;
+      bestMeters = meters;
+    }
+  }
+  return bestMeters <= maxMeters ? best : null;
+}

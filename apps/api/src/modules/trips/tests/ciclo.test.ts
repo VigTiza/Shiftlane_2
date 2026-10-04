@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { todayIn } from '@shiftlane/shared';
 import request from 'supertest';
@@ -595,6 +595,61 @@ describe('ciclo de vida del viaje desde la app del chofer', () => {
     await expect(
       app.db.system.tripEvent.deleteMany({ where: { tripId: trip.id } }),
     ).rejects.toThrow();
+  });
+
+  it('lista para escanear sin señal: planta, ruta, huellas y ya escaneados', async () => {
+    const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
+    const driver = await newDriver();
+    const vehicle = await newVehicle(10);
+    const trip = await newTrip({ driverId: driver.id, vehicleId: vehicle.id });
+    const base = `/driver/trips/${trip.id}`;
+    const inactive = await fx.passenger({ clientOrgId, plantId });
+    await app.db.system.passenger.update({
+      where: { id: inactive.id },
+      data: { status: 'inactive' },
+    });
+    await app.db.system.passengerCredential.create({
+      data: {
+        clientOrgId,
+        passengerId: assigned.id,
+        kind: 'badge_qr',
+        value: 'VIEJO-001',
+        revokedAt: new Date(),
+      },
+    });
+    await post(`${base}/checklist`, driver.auth, { items: ALL_OK }).expect(200);
+    await post(`${base}/start`, driver.auth).expect(200);
+    await post(`${base}/scan`, driver.auth, { employeeNumber: assigned.employeeNumber }).expect(
+      200,
+    );
+
+    const manifest = await request(app.server)
+      .get(`${base}/manifest`)
+      .set('authorization', driver.auth)
+      .expect(200);
+    type Entry = { id: string; onRoute: boolean; credentialHashes: string[] };
+    const byId = new Map(
+      (manifest.body.passengers as Entry[]).map((passenger) => [passenger.id, passenger]),
+    );
+    expect(byId.get(assigned.id)).toMatchObject({
+      name: 'Ana T.',
+      employeeNumber: assigned.employeeNumber,
+      onRoute: true,
+    });
+    expect(byId.get(assigned.id)!.credentialHashes).not.toContain(sha256('VIEJO-001'));
+    expect(byId.get(stranger.id)).toMatchObject({
+      onRoute: false,
+      credentialHashes: [sha256('GAF-0002')],
+    });
+    expect(byId.has(inactive.id)).toBe(false);
+    expect(manifest.body.boarded).toEqual([assigned.id]);
+    // Sin teléfono ni otros datos personales.
+    expect(Object.keys(byId.get(assigned.id)!).sort()).toEqual(
+      ['credentialHashes', 'employeeNumber', 'id', 'name', 'onRoute'].sort(),
+    );
+
+    const other = await newDriver();
+    await request(app.server).get(`${base}/manifest`).set('authorization', other.auth).expect(404);
   });
 
   it('la transportista configura el checklist y las fotos obligatorias', async () => {

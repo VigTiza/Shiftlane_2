@@ -2,8 +2,8 @@
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
 - Fase actual: F07 — App del chofer (Flutter)
-- Último prompt completado: F07-P05 Ubicación en segundo plano y modo sin señal
-- Siguiente prompt: F07-P06 Escaneo de pasajeros
+- Último prompt completado: F07-P06 Escaneo de pasajeros
+- Siguiente prompt: F07-P07 Notificaciones, actualización y pruebas integrales
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -190,7 +190,39 @@
   la app renueva la sesión una vez y repite la petición. La lista de viajes se guarda en
   drift (copia local de 24 h) y, con señal, se le aplican los eventos que siguen en la cola.
 
+- 2026-10-03 Escaneo sin señal: la API entrega por viaje la lista de pasajeros activos de la
+  planta con la huella SHA-256 de cada credencial vigente (valor aleatorio de la credencial QR
+  de Shiftlane o código del gafete) y solo nombre corto y número de empleado. El celular
+  compara huellas: no guarda valores en claro ni necesita verificar la firma Ed25519 (el valor
+  secreto solo viene en las credenciales auténticas). El servidor confirma después y su
+  resultado manda (si difiere, suena el suyo). Un «ya escaneado» local no se reenvía. Sonidos
+  generados con un script (sin archivos de terceros) y vibraciones distintas por resultado.
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F07-P06 Escaneo de pasajeros
+- Hecho: lector de QR y códigos de barras de gafetes (mobile_scanner con formatos comunes);
+  lista de la planta descargada al abrir el inicio y guardada en drift; validación local con
+  los mismos criterios y mensajes del servidor (correcto, otra ruta, no registrado, ya
+  escaneado, no válido) y confirmación del servidor; sonido y vibración distintos por
+  resultado (audioplayers); registro manual por número de empleado; parada más cercana
+  (500 m) en pantalla; a bordo sin señal solo cuenta a quien sube. API: GET
+  /driver/trips/:id/manifest.
+- Archivos principales: apps/driver/lib/domain/scan/*, lib/data/scan/*,
+  lib/application/scan/scan_controller.dart, lib/presentation/screens/trip/scan_screen.dart,
+  lib/presentation/widgets/code_scanner_view.dart, assets/sounds/*,
+  infra/scripts/generar-sonidos-chofer.py, apps/api/src/modules/trips/{schemas,driver-service,routes}.ts.
+- Pruebas agregadas / resultado: 14 nuevas en Flutter (validación de cada resultado, QR
+  alterado o no vigente, parada cercana, lista guardada, y en pantalla: correcto con parada,
+  otra ruta, no registrado, ya escaneado sin reenvío, no válido, manual, sin señal con la
+  lista guardada, corrección del servidor, sin lista); 87 en total. API: 1 de la lista (planta,
+  ruta, huellas, sin bajas ni credenciales revocadas, ya escaneados, otro chofer no la ve).
+- Problemas encontrados y cómo se resolvieron: liberar el controlador del campo de texto
+  mientras el diálogo se cerraba rompía el registro manual (se deja al recolector).
+  Dos pruebas de la API (catálogo de choferes y unidades) calculaban «hoy» en UTC y fallaban
+  de 18:00 a medianoche en México; ahora usan la zona horaria de la empresa.
+- Pendiente para después: probar la lectura de gafetes reales de cada planta (formatos) y el
+  volumen de los sonidos en celulares reales.
+
 ### 2026-10-03 — F07-P05 Ubicación en segundo plano y modo sin señal
 - Hecho: GPS solo durante el viaje (geolocator con servicio en primer plano y notificación
   «Viaje en curso», permisos de Android); cola local para todo evento, incluidas las

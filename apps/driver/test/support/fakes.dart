@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +12,10 @@ import 'package:dio/dio.dart';
 import 'package:shiftlane_driver/application/auth/auth_providers.dart';
 import 'package:shiftlane_driver/application/device_check/device_check_controller.dart';
 import 'package:shiftlane_driver/application/realtime/realtime_providers.dart';
+import 'package:shiftlane_driver/application/scan/scan_controller.dart';
+import 'package:shiftlane_driver/data/scan/audio_scan_feedback.dart';
+import 'package:shiftlane_driver/data/scan/manifest_repository.dart';
+import 'package:shiftlane_driver/domain/scan/scan_models.dart';
 import 'package:shiftlane_driver/application/sync/sync_coordinator.dart';
 import 'package:shiftlane_driver/application/tracking/trip_tracking.dart';
 import 'package:shiftlane_driver/application/trips/trip_providers.dart';
@@ -244,6 +251,90 @@ Widget fakeScanner(BuildContext context, ValueChanged<String> onCode) => Center(
   ),
 );
 
+/// El lector de pasajeros de prueba lee un QR (o un código de barras si es false).
+bool fakeScannedIsQr = true;
+
+Widget fakeCodeScanner(
+  BuildContext context,
+  ValueChanged<ScannedCode> onCode,
+) => Center(
+  child: ElevatedButton(
+    key: const Key('fake-scan'),
+    onPressed: () =>
+        onCode(ScannedCode(fakeScannedCode, isQr: fakeScannedIsQr)),
+    child: const Text('Simular escaneo'),
+  ),
+);
+
+String sha256Hex(String value) => sha256.convert(utf8.encode(value)).toString();
+
+/// Credencial QR de Shiftlane con el valor secreto indicado (la firma no se revisa en el
+/// celular: la confirma la huella del valor y después el servidor).
+String shiftlaneQr(String value) {
+  final claims = base64Url
+      .encode(
+        utf8.encode(
+          jsonEncode({
+            'c': '11111111-1111-4111-8111-111111111111',
+            'p': '22222222-2222-4222-8222-222222222222',
+            'o': '33333333-3333-4333-8333-333333333333',
+            'v': value,
+          }),
+        ),
+      )
+      .replaceAll('=', '');
+  return 'SL1.$claims.firma';
+}
+
+const anaSecret = 'valor-secreto-de-ana';
+
+/// Lista de la planta: Ana es de la ruta (QR, gafete GAF-0001, empleado A-123) y Luis es de
+/// otra ruta (gafete GAF-0002, empleado B-456).
+Map<String, dynamic> manifestJson({List<String> boarded = const []}) => {
+  'tripId': 'trip-1',
+  'plantId': 'plant-1',
+  'generatedAt': '2026-10-05T10:00:00.000Z',
+  'passengers': [
+    {
+      'id': 'p-ana',
+      'name': 'Ana T.',
+      'employeeNumber': 'A-123',
+      'onRoute': true,
+      'credentialHashes': [sha256Hex(anaSecret), sha256Hex('GAF-0001')],
+    },
+    {
+      'id': 'p-luis',
+      'name': 'Luis M.',
+      'employeeNumber': 'B-456',
+      'onRoute': false,
+      'credentialHashes': [sha256Hex('GAF-0002')],
+    },
+  ],
+  'boarded': boarded,
+};
+
+class FakeManifestApi extends ManifestApi {
+  FakeManifestApi([this.manifest]) : super(ApiClient(Dio()));
+
+  Map<String, dynamic>? manifest;
+  bool offline = false;
+  int fetches = 0;
+
+  @override
+  Future<TripManifest> fetch(String tripId) async {
+    fetches += 1;
+    if (offline || manifest == null) throw const NetworkFailure();
+    return TripManifest.fromJson({...manifest!, 'tripId': tripId});
+  }
+}
+
+class FakeScanFeedback implements ScanFeedback {
+  final List<ScanOutcome> played = [];
+
+  @override
+  Future<void> play(ScanOutcome outcome) async => played.add(outcome);
+}
+
 /// Viaje de ejemplo con tres paradas (respuesta de GET /driver/trips).
 Map<String, dynamic> tripJson({
   String id = 'trip-1',
@@ -337,6 +428,9 @@ class FakeSyncApi extends SyncApi {
   AppFailure? positionsFailure;
   int positionBatches = 0;
 
+  /// Respuesta del servidor a cada escaneo (por omisión, «Bienvenido, Ana.»).
+  ActionResult Function(Map<String, Object?> data)? onScan;
+
   @override
   Future<PositionsReceipt> sendPositions(
     List<Map<String, Object?>> points,
@@ -388,6 +482,7 @@ class FakeSyncApi extends SyncApi {
           ),
         },
       ),
+      'scan' when onScan != null => onScan!(data),
       'scan' => ActionResult(
         SyncStatus.applied,
         result: {
@@ -483,6 +578,8 @@ Future<ProviderContainer> pumpApp(
   FakeLocationTracker? location,
   FakeConnectivity? connectivity,
   AppDatabase? database,
+  FakeManifestApi? manifests,
+  FakeScanFeedback? feedback,
 }) async {
   final deviceProbe = probe ?? FakeDeviceProbe();
   // Con [database] la prueba maneja la base (por ejemplo, para simular un reinicio).
@@ -518,6 +615,9 @@ Future<ProviderContainer> pumpApp(
       connectivityMonitorProvider.overrideWithValue(
         connectivity ?? FakeConnectivity(),
       ),
+      codeScannerProvider.overrideWithValue(fakeCodeScanner),
+      manifestApiProvider.overrideWithValue(manifests ?? FakeManifestApi()),
+      scanFeedbackProvider.overrideWithValue(feedback ?? FakeScanFeedback()),
       photoCaptureProvider.overrideWithValue(
         () async => (bytes: <int>[1, 2, 3], name: 'foto.jpg'),
       ),

@@ -6,6 +6,7 @@ import '../../application/auth/auth_controller.dart';
 import '../../application/auth/auth_providers.dart';
 import '../../application/device_check/device_check_controller.dart';
 import '../../application/providers.dart';
+import '../../application/scan/scan_controller.dart';
 import '../../application/trips/trip_providers.dart';
 import '../../application/trips/trips_controller.dart';
 import '../../core/errors/app_failure.dart';
@@ -35,11 +36,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // Guarda el mapa de las rutas del día para verlo sin señal.
-    ref.listenManual(tripsControllerProvider, (_, next) {
+    // Guarda el mapa de las rutas y la lista de pasajeros de cada viaje pendiente para
+    // trabajar sin señal.
+    ref.listenManual(tripsControllerProvider, fireImmediately: true, (_, next) {
       final trips = next.value;
-      if (trips != null && ref.read(mapTilesEnabledProvider)) {
+      if (trips == null) return;
+      if (ref.read(mapTilesEnabledProvider)) {
         ref.read(routeTilePrefetcherProvider).prefetch(trips).ignore();
+      }
+      for (final trip in trips) {
+        if (trip.status == TripStatus.scheduled ||
+            trip.status == TripStatus.inProgress) {
+          ref.read(manifestProvider(trip.id).future).ignore();
+        }
       }
     });
   }

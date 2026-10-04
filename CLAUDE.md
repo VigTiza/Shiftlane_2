@@ -150,6 +150,9 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
   La red, los reintentos y el aviso «Sin señal» los maneja `SyncCoordinator`; el GPS
   (`TripTracking`) se enciende solo con un viaje en curso. Nada de esperar sonido/vibración
   (`unawaited`): en pruebas esas llamadas nunca responden.
+- Escaneo: `ScanController` valida primero en el celular con la lista del viaje
+  (`/driver/trips/:id/manifest`, huellas SHA-256; se guarda en drift) y luego confirma el
+  servidor. Sonidos en assets/sounds (`python infra/scripts/generar-sonidos-chofer.py`).
 - Riverpod: un Notifier no puede leer un proveedor que depende de él (CircularDependencyError);
   separar el estado compartido en un proveedor sin dependencias (p. ej. `lastPositionProvider`).
 
