@@ -1,0 +1,172 @@
+@import 'tailwindcss';
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/500.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+@import '@fontsource/ibm-plex-sans/700.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Sistema de diseño Shiftlane.
+ * - Azul marino de carretera para el marco (barra lateral) y ámbar de carril como ÚNICO color
+ *   de acción (botón principal, foco, elemento activo). El texto sobre ámbar es azul marino,
+ *   como en un señalamiento vial.
+ * - Los colores de estado (bien, atención, peligro, informativo) solo indican estado; el
+ *   naranja de «atención» es distinto del ámbar de acción para no confundirlos.
+ * - Profundidad con bordes y cambios de tono, no con sombras.
+ */
+:root {
+  --background: #f3f5f8;
+  --foreground: #0e1726;
+  --card: #ffffff;
+  --card-foreground: #0e1726;
+  --popover: #ffffff;
+  --popover-foreground: #0e1726;
+  --primary: #ffb703;
+  --primary-hover: #f2ab00;
+  --primary-foreground: #0b2545;
+  --secondary: #e9edf3;
+  --secondary-foreground: #13233a;
+  --muted: #eef1f5;
+  --muted-foreground: #576274;
+  --accent: #e9edf3;
+  --accent-foreground: #0e1726;
+  --destructive: #b3261e;
+  --destructive-foreground: #ffffff;
+  --border: #dbe1e9;
+  --input: #c9d2dd;
+  --ring: #e0a200;
+
+  --success: #1b7f3b;
+  --success-soft: #e3f3e8;
+  --warning: #c2410c;
+  --warning-soft: #fdeee4;
+  --danger: #b3261e;
+  --danger-soft: #fbe7e6;
+  --info: #24518f;
+  --info-soft: #e5edf8;
+
+  --sidebar: #0b2545;
+  --sidebar-foreground: #dfe6f0;
+  --sidebar-muted: #93a4bd;
+  --sidebar-active: #13315c;
+  --sidebar-border: #173a66;
+
+  --radius: 6px;
+  color-scheme: light;
+}
+
+.dark {
+  --background: #08111d;
+  --foreground: #e4e9f1;
+  --card: #0e1a2b;
+  --card-foreground: #e4e9f1;
+  --popover: #0e1a2b;
+  --popover-foreground: #e4e9f1;
+  --primary: #ffb703;
+  --primary-hover: #ffc533;
+  --primary-foreground: #0b2545;
+  --secondary: #172840;
+  --secondary-foreground: #dfe6f0;
+  --muted: #13233a;
+  --muted-foreground: #92a1b6;
+  --accent: #172840;
+  --accent-foreground: #e4e9f1;
+  --destructive: #e5534b;
+  --destructive-foreground: #ffffff;
+  --border: #1f3150;
+  --input: #2a3f60;
+  --ring: #ffb703;
+
+  --success: #46b86a;
+  --success-soft: #11291c;
+  --warning: #f08c42;
+  --warning-soft: #2e1c10;
+  --danger: #ef5b52;
+  --danger-soft: #331414;
+  --info: #79a5e8;
+  --info-soft: #132540;
+
+  --sidebar: #050c16;
+  --sidebar-foreground: #d6deea;
+  --sidebar-muted: #8394ad;
+  --sidebar-active: #102340;
+  --sidebar-border: #13243d;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-border: var(--sidebar-border);
+
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+  /* Placas, folios y cifras: tabulares para que las columnas se alineen. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

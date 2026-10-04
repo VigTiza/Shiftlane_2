@@ -5,13 +5,8 @@ import { z } from '../../lib/zod.ts';
 // argon2id con los parámetros mínimos recomendados por OWASP (19 MiB, 2 iteraciones).
 const ARGON2_OPTIONS = { algorithm: 2, memoryCost: 19_456, timeCost: 2, parallelism: 1 } as const;
 
-export const passwordSchema = z
-  .string()
-  .min(10, 'La contraseña debe tener al menos 10 caracteres.')
-  .max(128, 'La contraseña no puede tener más de 128 caracteres.')
-  .refine((value) => /\p{L}/u.test(value) && /\d/.test(value), {
-    message: 'La contraseña debe combinar letras y números.',
-  });
+// La regla de contraseña es la misma en la API y en los formularios web.
+export { passwordSchema } from '@shiftlane/shared';
 
 export const pinSchema = z.string().regex(/^\d{4}$/, 'El PIN debe tener exactamente 4 dígitos.');
 

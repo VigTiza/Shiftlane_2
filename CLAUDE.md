@@ -165,6 +165,23 @@ Monorepo con pnpm workspaces (pnpm-workspace.yaml). Cada app tiene su .env.examp
 - Riverpod: un Notifier no puede leer un proveedor que depende de él (CircularDependencyError);
   separar el estado compartido en un proveedor sin dependencias (p. ej. `lastPositionProvider`).
 
+## Panel web (apps/web)
+- `pnpm --filter @shiftlane/web dev` → http://localhost:5173 (abrirlo al usuario). La API va
+  por el proxy `/api` → localhost:3000, que reescribe la ruta de la cookie de sesión
+  (`/auth` → `/api/auth`); en producción `VITE_API_URL`.
+- React 19 + Vite 8 + Tailwind 4 + componentes estilo shadcn/ui sobre `radix-ui` (en
+  src/components/ui: button, input, primitives, overlays, controls, form, table),
+  React Router 8, TanStack Query 5, TanStack Table 8 (la 9 cambió su API), React Hook Form +
+  Zod (esquemas compartidos en packages/shared, p. ej. auth-schemas.ts).
+- Diseño: azul marino de marco y ámbar `primary` como ÚNICO color de acción (texto azul
+  marino sobre ámbar); colores de estado solo para estado; iconos solo Phosphor (nombres con
+  sufijo `Icon`); IBM Plex Sans/Mono locales; bordes en vez de sombras; cifras con `tabular`.
+  Referencia viva en /sistema-de-diseno.
+- Sesión: src/lib/auth.tsx (token en memoria, renovación con cookie en src/lib/api.ts,
+  permisos con `effectivePermissions` de los roles). Menú por ámbito y permiso en
+  src/navigation.ts. Pantallas nuevas: PageHeader + DataTable/EmptyState/LoadingRows.
+- Pruebas: Vitest + Testing Library (jsdom); `fakeApi` y `renderApp` en src/test/helpers.tsx.
+
 ## Configuración compartida
 - tsconfig.base.json (estricto), eslint.config.mjs (typescript-eslint con tipos),
   .prettierrc.json. Versiones comunes en `catalog:` de pnpm-workspace.yaml.

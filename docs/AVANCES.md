@@ -1,9 +1,10 @@
 # AVANCES — Shiftlane
 
 ## ESTADO ACTUAL (leer primero, máximo 25 líneas)
-- Fase actual: F08 — Panel web de la transportista (F07 terminada)
-- Último prompt completado: F07-P07 Notificaciones, actualización y pruebas integrales
-- Siguiente prompt: F08-P01 Proyecto web y sistema de diseño (abrir localhost al usuario)
+- Fase actual: F08 — Panel web de la transportista
+- Último prompt completado: F08-P01 Proyecto web y sistema de diseño
+- Siguiente prompt: F08-P02 Asistente de configuración inicial y catálogos (localhost abierto:
+  `pnpm --filter @shiftlane/web dev`, http://localhost:5173)
 - Trabajo a medias (si lo hay): ninguno
 - Pruebas: todas pasan (`pnpm test`, `pnpm lint`, `pnpm typecheck`)
 - Cómo levantar el entorno: `pnpm install`; base local = PostgreSQL nativo (puerto 5433,
@@ -210,7 +211,41 @@
   firmado con la llave de depuración; producción con android/key.properties (no versionado).
   Tutorial y copia local de viajes por chofer (celular compartido).
 
+- 2026-10-03 Panel web: dirección de diseño de consola operativa densa (skills
+  awesome-design «data-dense» y break-default-aesthetic, plugin taste): azul marino de
+  carretera + ámbar de carril como único acento, IBM Plex con cifras tabulares, Phosphor como
+  única familia de iconos, bordes en vez de sombras, modo claro y oscuro. Componentes propios
+  al estilo shadcn/ui (copiados y adaptados, sin la CLI). «Cambio de cuenta» = cuentas
+  recientes del navegador: hay una sola cookie de sesión, así que cambiar cierra la sesión y
+  abre el acceso con el correo sugerido. El menú se calcula con los roles de /auth/me (sin
+  permisos individuales todavía; la API autoriza de todos modos).
+
 ## HISTORIAL (más reciente arriba)
+### 2026-10-03 — F08-P01 Proyecto web y sistema de diseño
+- Hecho: apps/web con Vite 8, React 19, Tailwind 4, Radix, React Router 8, TanStack Query y
+  Table, React Hook Form + Zod; sistema de diseño (tokens claro/oscuro, tipografía, botones,
+  campos, casillas, interruptor, selector, diálogos, menús, ventanas emergentes, pestañas,
+  avisos, insignias de estado, tabla con búsqueda sin acentos, filtros por valores, orden y
+  paginación, estados vacío/carga/error) con su página /sistema-de-diseno; marco con barra
+  lateral por ámbito y rol, búsqueda global (Ctrl+K), menú de cuenta con tema y cambio de
+  cuenta; acceso, verificación en dos pasos, recuperar y restablecer contraseña; reglas de
+  acceso compartidas en packages/shared (la API las usa).
+- Archivos principales: apps/web/src/{app,main}.tsx, src/components/{ui,data-table}/*,
+  src/components/states.tsx, src/layout/app-shell.tsx, src/lib/{api,auth,theme,zod}.ts(x),
+  src/navigation.ts, src/pages/{home,design-system,placeholders}.tsx, src/pages/auth/*,
+  src/styles/globals.css, vite.config.ts, packages/shared/src/auth-schemas.ts.
+- Pruebas agregadas / resultado: 26 con Vitest y Testing Library (acceso, errores de la API,
+  2FA, cuenta de chofer rechazada, sesión por cookie, recuperar y restablecer, menú por rol y
+  ámbito, búsqueda global, tema oscuro, cambio de cuenta, página inexistente, tabla: paginar,
+  buscar sin acentos, filtrar, ordenar y vacío; formulario y diálogo del sistema de diseño;
+  cliente HTTP con renovación, sesión vencida y errores). API 372 en verde.
+- Problemas encontrados y cómo se resolvieron: TanStack Table 9 cambió por completo (se fijó
+  la 8); Phosphor 2.1 usa nombres con sufijo Icon; el cambio de cuenta competía con la
+  redirección al cerrar sesión (correo sugerido en el contexto en vez de la URL); jsdom no
+  trae ResizeObserver, scrollIntoView ni elementFromPoint (se simulan en las pruebas).
+- Pendiente para después: dividir el paquete por rutas (933 kB) cuando existan las pantallas;
+  devolver los permisos efectivos en /auth/me para respetar permisos individuales en el menú.
+
 ### 2026-10-03 — F07-P07 Notificaciones, actualización y pruebas integrales
 - Hecho: API: POST /driver/push-token, GET /driver/app-version (pública), envío FCM v1 y
   despachador de avisos (mensajes, cancelaciones, cambios de ruta; limpia tokens vencidos).

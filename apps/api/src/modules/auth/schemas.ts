@@ -1,8 +1,10 @@
+import { emailSchema, totpCodeSchema } from '@shiftlane/shared';
+
 import { z } from '../../lib/zod.ts';
 import { passwordSchema, pinSchema } from './passwords.ts';
 
-const email = z.email({ message: 'Escribe un correo válido.' }).max(254);
-const totpCode = z.string().regex(/^\d{6}$/, 'El código debe tener 6 dígitos.');
+const email = emailSchema;
+const totpCode = totpCodeSchema;
 const refreshTokenField = z.string().min(20).max(200);
 
 export const loginBody = z.object({ email, password: z.string().min(1).max(128) });
